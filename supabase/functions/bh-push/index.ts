@@ -22,10 +22,20 @@ function musteriBH(m: Rec | null) {
   };
 }
 
+// Müşteri kodu ve BizimHesap ID'si sırayla denenir; HTTP 500 hiçbir kayıt oluşturmaz
+async function tahsilatEkle(adaylar: string[], govde: Rec, eposta?: string) {
+  let son: unknown = null;
+  for (const id of adaylar) {
+    try { return await bhPostFirm("/b2b/AddCollection", { ...govde, customer: { customerId: id, email: eposta || "musteri@akcangroup.com" } }); }
+    catch (e) { son = e; if (!/HTTP 500/.test(String((e as Error).message))) throw e; }
+  }
+  throw son || new Error("Tahsilat eklenemedi");
+}
+
 async function satisGonder(col: string, r: Rec) {
   const aktif = col === "satislar" ? !r.iptal : KAPALI.includes(r.durum);
   const m = r.musteriId ? await getDoc("musteriler", r.musteriId) : null;
-  const custId = m ? (m.bhId || m.bhKod) : (AYAR.perakendeId || AYAR.perakendeKod);
+  const adaylar = [...new Set((m ? [m.bhKod, m.bhId] : [AYAR.perakendeKod, AYAR.perakendeId]).filter(Boolean))] as string[];
 
   // 1) Belge
   if (!aktif) {
@@ -64,6 +74,8 @@ async function satisGonder(col: string, r: Rec) {
       details,
     });
     r.bhGuid = res.guid; r.bhUrl = res.url; r.bhFaturali = false; r.bhGonderim = Date.now();
+    // Belge oluştu: tahsilat aşamasında hata olsa bile guid kaybolmasın
+    r.bhSon = Date.now(); await putDoc(col, r.id, r);
   }
 
   // 2) Tahsilatlar
@@ -79,12 +91,11 @@ async function satisGonder(col: string, r: Rec) {
   const kalanSet = new Set(kalan.map((g) => g.anahtar));
   for (const t of istenen) {
     if (kalanSet.has(anahtar(t))) continue;
-    if (!custId) throw new Error("BizimHesap'ta Perakende Müşteri carisi bulunamadı (Ayarlar)");
-    const res = await bhPostFirm("/b2b/AddCollection", {
+    if (!adaylar.length) throw new Error("BizimHesap'ta Perakende Müşteri carisi bulunamadı (Ayarlar)");
+    const res = await tahsilatEkle(adaylar, {
       paymentType: ODEME[t.yontem] || "1", currency: "TL", amount: r2(num(t.tutar)), paymentDate: bhTarih(t.t),
       note: `${r.no} tahsilat`, cashId: AYAR.kasalar?.[`${r.depo}|${t.yontem}`] || AYAR.kasalar?.[t.yontem] || undefined,
-      customer: { customerId: custId, email: m?.eposta || "musteri@akcangroup.local" },
-    });
+    }, m?.eposta);
     kalan.push({ anahtar: anahtar(t), guid: res.guid });
   }
   r.bhGonderilenTahsilat = kalan;
@@ -100,15 +111,14 @@ async function musteriGonder(m: Rec) {
     m.bhId = data.code; m.bhKod = m.id; m.kaynak = "BizimHesap";
   }
   m.bhAktarildi = true;
-  const custId = m.bhId || m.bhKod;
+  const adaylar = [...new Set([m.bhKod, m.bhId].filter(Boolean))] as string[];
   const odemeler: Rec[] = m.odemeler || [];
   for (const o of odemeler) {
     if (o.bhAktarildi || num(o.tutar) <= 0) continue;
-    const res = await bhPostFirm("/b2b/AddCollection", {
+    const res = await tahsilatEkle(adaylar, {
       paymentType: ODEME[o.yontem] || "1", currency: "TL", amount: r2(num(o.tutar)), paymentDate: bhTarih(o.t),
       note: o.not || "Akcan Oto Servis tahsilat", cashId: AYAR.kasalar?.[o.yontem] || undefined,
-      customer: { customerId: custId, email: m.eposta || "musteri@akcangroup.local" },
-    });
+    }, m.eposta);
     o.bhAktarildi = true; o.bhGuid = res.guid;
   }
   m.odemeler = odemeler; m.bhBekleyen = false; m.bhHata = null;

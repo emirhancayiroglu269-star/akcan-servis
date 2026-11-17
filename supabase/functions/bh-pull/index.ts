@@ -73,8 +73,12 @@ Deno.serve(async (req) => {
     for (const [cid, xs] of musteriGrup) {
       try {
         const ek = await bhGet(`/b2b/abstract/${cid}`);
-        const metin = (ek.abstract || []).map((a: Rec) => String(a.note || "")).join("\n");
-        for (const x of xs) if (x.data.no && metin.includes(x.data.no)) {
+        // Tahsilat satırları da program no'sunu içerdiği için yalnızca belge satırlarına bakılır
+        const satirlar = (ek.abstract || []).filter((a: Rec) => !/tahsilat|ödeme|devir/i.test(String(a.type || "") + " " + String(a.note || "")) || a.id);
+        const faturali = (x: Rec) => satirlar.some((a: Rec) =>
+          (a.id && String(a.id).toUpperCase() === String(x.data.bhGuid).toUpperCase()) ||
+          (!/tahsilat/i.test(String(a.type || "") + String(a.note || "")) && String(a.note || "").includes(x.data.no)));
+        for (const x of xs) if (x.data.no && faturali(x)) {
           x.data.bhFaturali = true;
           await putDoc(x.col, x.id, x.data);
         }

@@ -645,6 +645,7 @@ function waLink(tel,msg,label){ const t=telKey(tel); if(t.length<10) return `<sp
 /* ---------- BizimHesap durumu ---------- */
 function bhDurumHTML(r){
   if(!r||!r.id) return "";
+  if(r.iptal||r.durum==="İptal") return r.bhAktarildi&&!r.bhGuid?`<div class="banner" style="margin-bottom:12px;background:var(--gray-soft);color:var(--muted)">BizimHesap'taki kayıt da iptal edildi.</div>`:r.bhAktarildi===false?`<div class="banner warn" style="margin-bottom:12px">İptal BizimHesap'a gönderiliyor…</div>`:"";
   if(r.bhHata) return `<div class="banner bad" style="margin-bottom:12px">BizimHesap'a gönderilemedi: ${esc(r.bhHata)}. Birkaç dakika içinde tekrar denenecek.</div>`;
   if(r.bhAktarildi&&r.bhGuid&&!r.bhFaturali) return `<div class="banner warn" style="margin-bottom:12px">BizimHesap'ta taslak sipariş olarak duruyor. Stoktan düşmesi için BizimHesap'ta faturalaştırın.${r.bhUrl?` <a href="${esc(r.bhUrl)}" target="_blank" rel="noopener">Belgeyi aç</a>`:""}</div>`;
   if(r.bhAktarildi&&r.bhFaturali) return `<div class="banner" style="margin-bottom:12px;background:var(--ok-soft);color:var(--ok)">BizimHesap'ta faturalaştırıldı.</div>`;

@@ -936,6 +936,7 @@ V.ayarlar=()=>{const A=S.ayarlar;
   </div>
   <div class="card" style="margin-top:16px"><h2>Servis ayarları</h2>
     <div class="fg">${f("teknisyenler","Teknisyenler (virgülle ayırın)")}${f("depolar","Depolar (virgülle ayırın)")}${f("onek","İş emri no öneki","SRV")}${f("primOrani","Usta primi (işçiliğin %'si)","örn. 10")}${f("randevuKapasite","Günlük randevu kapasitesi","8")}</div>
+    <label class="f" style="margin-top:10px">Tedarikçi siteleri (her satıra "Ad|adres")<textarea id="a-tedsite" data-a="tedarikciSiteleri" rows="6" style="font-family:monospace;font-size:13px">${esc(A.tedarikciSiteleri||SITE_VAR)}</textarea></label>
     <label class="f" style="margin-top:10px">WhatsApp durum mesajı <span style="font-weight:400">{musteri} {plaka} {durum} {tutar} {no} {firma} {tel}</span><textarea id="a-sablon" data-a="sablon">${esc(A.sablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">WhatsApp bakım hatırlatma <span style="font-weight:400">{musteri} {plaka} {tarih} {firma} {tel}</span><textarea id="a-bakim" data-a="bakimSablon">${esc(A.bakimSablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">Teslim formu şartları<textarea id="a-sartlar" data-a="sartlar">${esc(A.sartlar||"")}</textarea></label>
@@ -1092,6 +1093,7 @@ function isFormHTML(){
       <div class="tot" id="f-tot">${totHTML(h)}</div>
     </div>
   </div>
+  ${teklifListeHTML()}
   ${siparisHTML()}
   ${teklifHTML()}
   </div>
@@ -1252,6 +1254,45 @@ function randevuYeni(arac,tarihMs){
   let t=tarihMs; if(!t){ const d=fromInput(UI.randevuGun)||gunBasi(Date.now()); const n=new Date(); t=dInput(d)===dInput(n.getTime())?new Date(Math.ceil(n.getTime()/1800000)*1800000).getTime():d+9*3600000; }
   F={id:null,tarihStr:dtInput(t),sure:60,plaka:arac?arac.plaka:"",aracId:arac?arac.id:null,musteriAd:m?m.ad:"",tel:m?m.tel||"":"",depo:depolar()[0]||"",is:arac&&arac.sonrakiBakimTarih?"Periyodik bakım":"",durum:"Bekleniyor"};
   M="randevu"; modalCiz();
+}
+
+/* ---------- Tedarikçi siteleri ve fiyat teklifleri ---------- */
+const SITE_VAR=`Otomarmara|https://b4b.otomarmara.com.tr
+Kaymazlar Motor|https://bayi.kaymazlarmotor.com
+Neko|https://b4b.neko.com.tr
+Oto İsmail|https://b2b.otoismail.com.tr
+Martaş|https://online.martas.com.tr
+Özçete|https://online.ozcete.com.tr
+Ada Oto|https://bayi.adaoto.com.tr
+Başbuğ|https://b2bbasbug.com
+Özaş|https://program.ozas.com.tr
+İron Otomotiv|https://b2b.ironotomotiv.com
+Omay Otomotiv|https://b2b.omayotomotiv.com.tr
+ATG Yedek Parça|https://atgyedekparca.online
+Vizyon Yedek Parça|https://b2b.vizyonyedekparca.com`;
+function siteler(){ return String(S.ayarlar.tedarikciSiteleri||SITE_VAR).split("\n").map(l=>l.split("|").map(x=>x.trim())).filter(x=>x[0]&&/^https?:\/\//.test(x[1]||"")).map(([ad,url])=>({ad,url})); }
+function siteOneri(metin){ const m=up(metin||""); const o=new Set();
+  if(/\bGVA\b/.test(m)) o.add("Oto İsmail"); if(/\bMGA\b/.test(m)) o.add("Martaş"); if(!/F[İI]LTRE/.test(m)&&/MADEN[İI]|MOTOR YA[GĞ]|[ŞS]ANZIMAN YA[GĞ]|D[İI]FERANS[İI]YEL YA[GĞ]|\b\d{1,2}W-?\d{2}\b|\bATF\b/.test(m)) o.add("İron Otomotiv"); return o; }
+function tedAraHTML(kod,ipucu,yer){
+  const L=siteler(), o=siteOneri(ipucu);
+  if(!L.length) return "";
+  return `<div class="ted-ara"><div class="muted" style="font-size:13px;font-weight:600;margin-top:8px">Tedarikçide ara ${kod?`<span style="font-weight:500">· "${esc(kod)}" panoya kopyalanır, site yeni sekmede açılır</span>`:""}</div>
+    <div class="hizli">${L.sort((a,b)=>(o.has(b.ad)?1:0)-(o.has(a.ad)?1:0)).map(x=>`<button class="chip ${o.has(x.ad)?"on":""}" data-act="tedSiteAc" data-url="${esc(x.url)}" data-kod="${esc(kod||"")}" title="${esc(x.url)}">${esc(x.ad)}${o.has(x.ad)?" <small>önerilen</small>":""}</button>`).join("")}</div></div>`;
+}
+function teklifListeHTML(){
+  const L=(F.teklifler||[]).slice().sort((a,b)=>num(a.fiyat)-num(b.fiyat));
+  return `<div class="sec" id="f-teklifler"><h3>Tedarikçi fiyatları <span class="toolbar" style="margin:0"><button class="btn sm" data-act="tklfEkle">Fiyat ekle</button></span></h3>
+    ${tedAraHTML((F._araKod||""),(F.kalemler||[]).map(k=>k.ad).join(" "),"is")}
+    ${F.kalemler.some(k=>k.tip==="parca")?`<div class="toolbar" style="margin:6px 0 0"><label class="f" style="max-width:340px">Aranacak kod<select data-arakod="1"><option value="">Parça seçin</option>${F.kalemler.filter(k=>k.tip==="parca").map(k=>{ const st=k.stokId?S.stok[k.stokId]:null; const kd=(st&&(st.oem||st.kod))||k.kod||k.ad; return `<option value="${esc(kd)}"${F._araKod===kd?" selected":""}>${esc(k.ad)} · ${esc(kd)}</option>`; }).join("")}</select></label></div>`:""}
+    ${L.length?`<div class="tw" style="margin-top:8px"><table><thead><tr><th>Parça</th><th>Tedarikçi</th><th class="n">Fiyat</th><th>Not</th><th></th></tr></thead><tbody>${L.map(x=>{ const i=F.teklifler.indexOf(x); return `<tr>
+      <td><input id="tk-p-${i}" data-tk="${i}.parca" value="${esc(x.parca||"")}" aria-label="Parça"></td>
+      <td><input id="tk-t-${i}" data-tk="${i}.tedarikci" list="dl-ted" value="${esc(x.tedarikci||"")}" aria-label="Tedarikçi" style="min-width:110px"></td>
+      <td class="n"><input id="tk-f-${i}" data-tk="${i}.fiyat" inputmode="decimal" value="${esc(x.fiyat||"")}" style="width:90px" aria-label="Fiyat"></td>
+      <td><input id="tk-n-${i}" data-tk="${i}.not" value="${esc(x.not||"")}" placeholder="stok, teslim…" aria-label="Not"></td>
+      <td class="right" style="white-space:nowrap"><button class="btn sm" data-act="tklfSiparis" data-i="${i}">Sipariş ver</button><button class="btn sm danger" data-act="tklfSil" data-i="${i}" aria-label="Sil">×</button></td></tr>`; }).join("")}</tbody></table></div>
+      <datalist id="dl-ted">${[...new Set([...siteler().map(x=>x.ad),...tedarikciler()])].map(t=>`<option value="${esc(t)}">`).join("")}</datalist>
+      <p class="muted" style="font-size:13px;margin:4px 0 0">En ucuzu üstte. Fiyatlar yalnızca bu iş emrinde not olarak tutulur.</p>`:`<p class="muted" style="font-size:13px;margin:6px 0 0">Sitelerden baktığınız fiyatları buraya yazarak karşılaştırın; seçtiğinize "Sipariş ver" deyin.</p>`}
+  </div>`;
 }
 
 /* ---------- parça siparişleri ---------- */
@@ -1458,6 +1499,7 @@ function stokHTML(){ const s=F, yeni=!s.id, hz=s.tur==="hizmet", dp=depolar();
   ${hz?"":`<span class="yon-only" style="display:contents">${inp("alis","Alış fiyatı (KDV hariç)","decimal")}</span>`}${inp("satis","Satış fiyatı (KDV dahil)","decimal")}
   <label class="f">KDV %<select id="s2-kdv" data-st="kdv">${KDVLER.map(v=>`<option value="${v}"${num(s.kdv)===v?" selected":""}>${v}</option>`).join("")}</select></label>
   ${hz?"":inp("birim","Birim","","Adet")+inp("kritik","Kritik seviye","decimal")}</div>
+  ${hz||yeni?"":tedAraHTML(s.oem?String(s.oem).split(/[ ,;]+/)[0]:(s.kod||""),[s.ad,s.marka,s.kategori].join(" "),"stok")}
   ${hz?"":`<p class="muted yon-only" style="font-size:13px">Birim kâr (KDV hariç): <b>${TL(kar)}</b>${num(s.alis)>0?` · %${NF.format(kar/num(s.alis)*100)}`:""}</p>`}
   ${hz?"":`<div class="sec"><h3>Depo miktarları</h3>${yeni?`<div class="fg">${dp.map((d,i)=>`<label class="f">${esc(d)} açılış miktarı<input id="s2-q-${i}" data-sq="${esc(d)}" value="${esc((s.miktar||{})[d]||"")}" inputmode="decimal"></label>`).join("")}</div>`:
     `<div class="tiles">${dp.map(d=>`<div class="tile"><div class="k">${esc(d)}</div><div class="v">${NF.format(num((s.miktar||{})[d])).replace(/,00$/,"")}</div></div>`).join("")}</div>
@@ -1530,6 +1572,12 @@ const ACT={
   durumF:d=>{UI.durum=d.v;render();},
   bhAralik:d=>{UI.bhAralik=d.v;render();},
   siparisEkle:()=>{ siparisYeni(""); },
+  tedSiteAc:d=>{ window.open(d.url,"_blank","noopener"); if(d.kod&&navigator.clipboard) navigator.clipboard.writeText(d.kod).then(()=>toast(`"${d.kod}" kopyalandı; sitede arama kutusuna yapıştırın`)).catch(()=>{}); },
+  tklfEkle:()=>{ F.teklifler=F.teklifler||[]; const k=F.kalemler.find(x=>x.tip==="parca"&&(F._araKod?((x.stokId&&S.stok[x.stokId]&&(S.stok[x.stokId].oem||S.stok[x.stokId].kod))||x.kod||x.ad)===F._araKod:true));
+    F.teklifler.push({parca:k?k.ad:"",tedarikci:"",fiyat:"",not:"",t:Date.now()}); modalCiz(); const el=document.getElementById("tk-t-"+(F.teklifler.length-1)); if(el) el.focus(); },
+  tklfSil:d=>{ F.teklifler.splice(+d.i,1); modalCiz(); },
+  tklfSiparis:d=>{ const x=F.teklifler[+d.i]; if(!x) return; if(!x.tedarikci){ toast("Tedarikçiyi yazın"); return; }
+    siparisYeni(x.parca||""); const sp=F.siparisler[F.siparisler.length-1]; sp.tedarikci=x.tedarikci; sp.not=x.fiyat?`Fiyat: ${x.fiyat}${x.not?" · "+x.not:""}`:x.not||""; x.secildi=true; modalCiz(); },
   alisSekme:d=>{UI.alisSekme=d.v;render();},
   alisAralik:d=>{UI.alisAralik=d.v;render();},
   alisYeni:()=>{ F={id:null,tedarikciId:null,tedarikciAd:"",faturaNo:"",tarihStr:dInput(Date.now()),vadeStr:"",depo:depolar()[0]||"",kalemler:[],odemeler:[],not:"",alisGuncelle:true,siparisRef:[]}; M="alis"; modalCiz(); },
@@ -1784,6 +1832,7 @@ document.addEventListener("input",e=>{
   if(d.al!==undefined&&F){ const [i,k]=d.al.split("."); if(F.kalemler[+i]) F.kalemler[+i][k]=t.value; alisToplamYenile(); return; }
   if(d.aks!==undefined){ const res=stokAra(t.value,8).filter(x=>x.tur!=="hizmet"), dd=$("#al-dd");
     dd.innerHTML=res.length?`<div class="dd">${res.map(x=>`<div data-act="alisKalemEkle" data-id="${esc(x.id)}"><b>${esc(x.kod||"")}</b> ${esc(x.ad)} <small>${esc(F.depo)}: ${NF.format(num((x.miktar||{})[F.depo])).replace(/,00$/,"")} · alış ${TL(x.alis)}</small></div>`).join("")}</div>`:""; return; }
+  if(d.tk!==undefined&&F){ const [i,k]=d.tk.split("."); if(F.teklifler&&F.teklifler[+i]) F.teklifler[+i][k]=t.value; return; }
   if(d.sp!==undefined&&F){ const [i,k]=d.sp.split("."); if(F.siparisler&&F.siparisler[+i]) F.siparisler[+i][k]=t.type==="date"?fromInput(t.value):t.value; return; }
   if(d.k!==undefined&&F){ const [i,k]=d.k.split("."); F.kalemler[+i][k]=t.value; isToplamYenile(); return; }
   if(d.ks!==undefined){ const res=stokAra(t.value,8), dd=$("#f-dd");
@@ -1800,6 +1849,7 @@ document.addEventListener("change",e=>{
   const t=e.target, d=t.dataset;
   if(d.durumId){ durumDegistir(d.durumId,t.value); return; }
   if(d.alg!==undefined&&F){ F.alisGuncelle=t.checked; return; }
+  if(d.arakod!==undefined&&F){ F._araKod=t.value; modalCiz(); return; }
   if(d.alyon!==undefined&&F){ const k=$("#al-od-kasa-k"); if(k) k.innerHTML=kasaSecHTML("al-od-kasa",F.depo,t.value); return; }
   if(d.tyon!==undefined){ const k=$("#t-od-kasa-k"); if(k) k.innerHTML=kasaSecHTML("t-od-kasa","",t.value); return; }
   if(M==="alis"&&t.id==="al-ted"&&F){ modalCiz(); return; }

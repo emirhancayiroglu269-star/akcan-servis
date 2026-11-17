@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   const basla = Date.now();
   const sinir = Number(new URL(req.url).searchParams.get("max") || 0);
   const durum: Rec = (await getDoc("ayarlar", "bhhareket")) || {};
-  const bakiyeEski: Record<string, string> = durum.bakiye || {};
+  const bakiyeEski: Record<string, any> = durum.bakiye || {};
   try {
     const musBH: Rec[] = [];
     for (let p = 1; p < 50; p++) {
@@ -40,21 +40,26 @@ Deno.serve(async (req) => {
     const appMus = new Map((await allDocs("musteriler")).filter((m) => m.data.bhId).map((m) => [m.data.bhId, m.id]));
     const mevcut = await allDocs("bhhareket");
     const mevcutMap = new Map(mevcut.map((d) => [d.id, d.data]));
-    // Peşin satışta bakiye değişmez; bu yüzden: bakiyesi değişenler + perakende + son 7 günde hareketi olanlar,
-    // saatte bir de bütün cariler okunur.
-    // BizimHesap ekstre servisinde istek sınırı var: her çalışmada en çok MAX cari okunur.
-    // Sıra: perakende cari (peşin satışlar), bakiyesi değişenler, sonra bütün carilerde sırayla dönen imleç.
-    const MAX = sinir || 10;
+    // BizimHesap ekstre servisinin istek sınırı düşük: günlük bütçe ve sınıra takılınca 1 saat bekleme.
+    // Öncelik: perakende cari (peşin satışlar, 10 dakikada bir), bakiyesi değişenler, sonra sırayla diğerleri (çalışma başına 1).
+    const simdi = Date.now();
+    const gun = new Date(simdi + 3 * 3600000).toISOString().slice(0, 10);
+    const sayac = durum.sayac && durum.sayac.gun === gun ? durum.sayac : { gun, n: 0 };
+    const GUNLUK = 300;
+    if (!sinir && durum.bekle && simdi < durum.bekle) {
+      return json({ ok: true, bekleme: new Date(durum.bekle).toISOString() });
+    }
+    const MAX = sinir || Math.max(0, Math.min(5, GUNLUK - sayac.n));
     const sirali = [...musBH].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const sec = new Map<string, Rec>();
-    for (const c of sirali) if (/perakende/i.test(c.title || "")) sec.set(c.id, c);
-    for (const c of sirali) if (sec.size < MAX && bakiyeEski[c.id] !== undefined && bakiyeEski[c.id] !== String(c.balance)) sec.set(c.id, c);
+    if (MAX > 0 && (!durum.perakendeSon || simdi - durum.perakendeSon > 10 * 60000)) for (const c of sirali) if (/perakende/i.test(c.title || "") && sec.size < MAX) sec.set(c.id, c);
+    for (const c of sirali) if (sec.size < MAX && bakiyeEski[c.id] !== undefined && Number(bakiyeEski[c.id]) !== trNum(c.balance)) sec.set(c.id, c);
     let imlec = Number(durum.imlec || 0) % Math.max(1, sirali.length);
-    for (let n = 0; sec.size < MAX && n < sirali.length; n++) { const c = sirali[imlec]; imlec = (imlec + 1) % sirali.length; if (!sec.has(c.id)) sec.set(c.id, c); }
+    for (let n = 0, eklendi = 0; sec.size < MAX && eklendi < 1 && n < sirali.length; n++) { const c = sirali[imlec]; imlec = (imlec + 1) % sirali.length; if (!sec.has(c.id)) { sec.set(c.id, c); eklendi++; } }
     const degisen = [...sec.values()];
     const kuyruk = [...degisen];
     console.log("bh-hareket basla", { musteri: musBH.length, okunacak: kuyruk.length, imlec });
-    const bakiyeYeni: Record<string, string> = { ...bakiyeEski };
+    const bakiyeYeni: Record<string, any> = { ...bakiyeEski };
     let okunan = 0, yazilan = 0, silinen = 0; const hatalar: string[] = [];
 
     let sinirda = false;
@@ -81,11 +86,12 @@ Deno.serve(async (req) => {
           // BizimHesap'ta silinen/iptal edilen hareketler
           const sil = mevcut.filter((d) => d.data.bhMusteriId === c.id && !gorulen.has(d.id)).map((d) => d.id);
           if (sil.length) { await sb.from("docs").delete().eq("col", "bhhareket").in("id", sil); silinen += sil.length; }
-          bakiyeYeni[c.id] = String(c.balance);
+          bakiyeYeni[c.id] = trNum(c.balance) as any; sayac.n++;
+          if (/perakende/i.test(c.title || "")) durum.perakendeSon = Date.now();
           await bekle(700);
         } catch (e) {
           const m = (e as Error).message;
-          if (/429/.test(m)) { sinirda = true; kuyruk.unshift(c); } else hatalar.push(`${c.title}: ${m}`);
+          if (/429/.test(m)) { sinirda = true; sayac.n++; kuyruk.unshift(c); } else hatalar.push(`${c.title}: ${m}`);
           console.log("hata", c.title, m);
         }
       }
@@ -93,7 +99,7 @@ Deno.serve(async (req) => {
     await isci();
     const kalan = kuyruk.length;
     console.log("bh-hareket bitti", { okunan, yazilan, silinen, kalan, hata: hatalar.length });
-    await putDoc("ayarlar", "bhhareket", { son: Date.now(), imlec: sinirda ? (durum.imlec || 0) : imlec, sinirda, bakiye: bakiyeYeni, okunan, yazilan, silinen, kalan, hatalar: hatalar.slice(0, 5) });
+    await putDoc("ayarlar", "bhhareket", { son: Date.now(), imlec: sinirda ? (durum.imlec || 0) : imlec, sinirda, bekle: sinirda ? Date.now() + 60 * 60000 : null, sayac, perakendeSon: durum.perakendeSon || null, bakiye: bakiyeYeni, okunan, yazilan, silinen, kalan, hatalar: hatalar.slice(0, 5) });
     return json({ ok: true, sinirda, degisen: degisen.length, okunan, yazilan, silinen, kalan, hata: hatalar.length });
   } catch (e) {
     console.log("genel hata", (e as Error).message);

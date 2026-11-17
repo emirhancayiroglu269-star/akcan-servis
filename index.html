@@ -347,7 +347,7 @@ function hataMesaj(e){
   if(c==="revoked") return "Bu sayfaya erişim kapandı. Sayfayı yeniden açın.";
   return "Kaydedilemedi, bağlantıyı kontrol edip tekrar deneyin.";
 }
-const BH_ALAN=["bhGuid","bhUrl","bhGonderilenTahsilat","bhFaturali","bhSon","bhId","bhKod","bhHata","bhGonderim"];
+const BH_ALAN=["bhGuid","bhUrl","bhGonderilenTahsilat","bhFaturali","bhSon","bhId","bhKod","bhHata","bhGonderim","onay","onayGecmis","teklifToken"];
 function bhKoru(col,id,obj){
   const cur=col==="ayarlar"?null:S[col][id]; if(!cur) return obj;
   for(const k of BH_ALAN) if(cur[k]!==undefined) obj[k]=cur[k];
@@ -414,7 +414,9 @@ async function verileriYukle(){
     const r=p.new&&p.new.col?p.new:p.old; if(!r) return;
     if(p.eventType==="DELETE"){ if(S[r.col]&&r.col!=="ayarlar") delete S[r.col][r.id]; }
     else if(r.col==="ayarlar"){ AY[r.id]=r.data; if(r.id==="genel") S.ayarlar=Object.assign({},DEF_AYAR,r.data); if(r.id==="senkron") SENK=r.data; if(r.id==="kullanicilar") sb.rpc("akcan_rol").then(({data})=>{ if(data&&data!==ROL){ ROL=data; if(ROL==="yok") location.reload(); if(!izin(view)) location.hash="#panel"; renderSoon(); } }); }
-    else if(S[r.col]) S[r.col][r.id]=r.data;
+    else if(S[r.col]){
+      if(r.col==="isemirleri"&&r.data&&r.data.onay){ const es=S.isemirleri[r.id]; if(!es||!es.onay||es.onay.zaman!==r.data.onay.zaman){ toast(`${plakaFmt(r.data.plaka)}: müşteri teklifi ${r.data.onay.durum==="red"?"ONAYLAMADI":"onayladı"}${r.data.onay.not?" · "+r.data.onay.not:""}`); if(F&&F.id===r.id){ F.onay=r.data.onay; F.onayGecmis=r.data.onayGecmis; } } }
+      S[r.col][r.id]=r.data; }
     renderSoon();
   }).subscribe();
 }
@@ -459,7 +461,7 @@ const isRow=r=>{
   const gec=r.tahminiTeslim&&!ACIK_DEGIL.includes(r.durum)&&!KAPALI.includes(r.durum)&&r.tahminiTeslim<Date.now();
   return `<div class="row" tabindex="0" data-act="isAc" data-id="${esc(r.id)}">
     <div class="lead"><span class="plaka">${esc(plakaFmt(r.plaka))}</span></div>
-    <div class="main"><div class="t1">${esc(r.musteriAd||"Müşteri yok")} <span class="muted">· ${esc([r.marka,r.model].filter(Boolean).join(" "))}</span></div>
+    <div class="main"><div class="t1">${esc(r.musteriAd||"Müşteri yok")} <span class="muted">· ${esc([r.marka,r.model].filter(Boolean).join(" "))}</span> ${!KAPALI.includes(r.durum)?onayRozet(r):""}</div>
       <div class="t2">${esc(r.no)}${r.bhHata?' · <span class="late">BH hatası</span>':r.bhAktarildi&&r.bhFaturali?" · BH faturalı":r.bhAktarildi&&r.bhGuid?" · BH taslak":""} · ${tarih(r.giris)}${!ACIK_DEGIL.includes(r.durum)&&bekl>0?` · ${bekl} gündür serviste`:""}${r.teknisyen?" · "+esc(r.teknisyen):""}${gec?` · <span class="late">Teslim tarihi geçti</span>`:""}</div></div>
     <div class="end"><select class="durum-sec ${pillCls(r.durum)}" data-durum-id="${esc(r.id)}" aria-label="Durumu değiştir">${opt(durumSecenek(r.durum),r.durum)}</select><div class="t2">${TL(h.genel)}</div></div></div>`;
 };
@@ -1079,6 +1081,7 @@ function isFormHTML(){
       <div class="tot" id="f-tot">${totHTML(h)}</div>
     </div>
   </div>
+  ${teklifHTML()}
   </div>
   <div class="sekme" data-sekme="tahsilat"${UI.isSekme==="tahsilat"?"":' style="display:none"'}>
   <div class="sec" style="border-top:0;margin-top:0"><h3>Tahsilat <span class="muted" style="font:500 14px var(--body)" id="f-kalan">Ödenen ${TL(od)} · Kalan <b>${TL(h.genel-od)}</b></span></h3>
@@ -1102,6 +1105,30 @@ function isFormHTML(){
     ${f.id?`<button class="btn" data-act="fisIndir">Fiş / teslim formu yazdır</button><button class="btn" data-act="etiketIndir">Barkod etiketi yazdır</button><span id="f-wa">${waLink(f.musteriTel,sablonDoldur(S.ayarlar.sablon,{musteri:f.musteriAd,plaka:plakaFmt(f.plaka),durum:f.durum,tutar:TL(h.genel),no:f.no}),"WhatsApp ile bildir")}</span><button class="btn danger yon-only" data-act="isSil">Sil</button>`:""}
   </div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="isKaydet">Kaydet</button></div>`;
 }
+/* ---------- müşteri teklif/onay ---------- */
+const sayiN=v=>{ const n=typeof v==="number"?v:Number(String(v==null?"":v).replace(",",".")); return isFinite(n)?n:0; };
+function teklifOzet(r){
+  const s=JSON.stringify([(r.kalemler||[]).map(k=>[k.tip,k.ad,sayiN(k.adet),sayiN(k.fiyat),sayiN(k.kdv)]),sayiN(r.indirim)]);
+  let a=5381; for(let i=0;i<s.length;i++) a=((a*33)^s.charCodeAt(i))|0; return (a>>>0).toString(36);
+}
+function onayDurum(r){ if(!r.onay) return r.teklifToken?"bekliyor":""; if(r.onay.ozet!==teklifOzet(r)) return "degisti"; return r.onay.durum==="red"?"red":"onay"; }
+const ONAY_ROZET={bekliyor:["p-Parça","Onay bekliyor"],onay:["p-Tamamlandı","Müşteri onayladı"],red:["p-İptal","Müşteri onaylamadı"],degisti:["p-Parça","Onaydan sonra değişti"]};
+const onayRozet=r=>{ const d=onayDurum(r); return d?`<span class="pill ${ONAY_ROZET[d][0]}">${ONAY_ROZET[d][1]}</span>`:""; };
+const teklifLink=r=>location.origin+location.pathname.replace(/[^/]*$/,"")+"teklif.html?t="+r.teklifToken;
+function teklifHTML(){
+  const f=F, d=onayDurum(f), kayitli=f.id&&S.isemirleri[f.id];
+  const degismis=kayitli&&teklifOzet(kayitli)!==teklifOzet(f);
+  const msg=f.teklifToken?`Sayın ${f.musteriAd||"müşterimiz"}, ${plakaFmt(f.plaka)} plakalı aracınız için servis teklifimiz hazır (${TL(hesap(f.kalemler,f.indirim).genel)}). Detayları görüp onayınızı bu linkten verebilirsiniz: ${teklifLink(f)} — ${S.ayarlar.firma||""}`:"";
+  return `<div class="sec" id="f-teklif"><h3>Müşteri onayı ${onayRozet(f)}</h3>
+    ${f.onay?`<p style="margin:0 0 8px">${f.onay.durum==="red"?"Onaylamadı":"Onayladı"}: <b>${tarihSaat(f.onay.zaman)}</b>${f.onay.ad?" · "+esc(f.onay.ad):""} · ${TL(f.onay.tutar)}${f.onay.not?`<br><span class="muted">Not: ${esc(f.onay.not)}</span>`:""}${d==="degisti"?`<br><span class="late">Onaydan sonra parça/işçilik değişti; yeniden onay alın.</span>`:""}</p>`:""}
+    <div class="toolbar" style="margin:0">
+      ${f.teklifToken&&!degismis?`${waLink(f.musteriTel,msg,"Teklifi WhatsApp'tan gönder")}<button class="btn sm" data-act="teklifKopyala">Linki kopyala</button><a class="btn sm" href="${esc(teklifLink(f))}" target="_blank" rel="noopener">Müşterinin göreceği sayfa</a>`
+        :`<button class="btn sm pri" data-act="teklifOlustur">${f.teklifToken?"Kaydet ve linki güncelle":"Teklif linki oluştur"}</button>`}
+    </div>
+    <p class="muted" style="font-size:13px;margin:6px 0 0">Müşteri linkte parça ve işçilik kalemlerini, toplamı görür; alış fiyatı ve kâr görünmez. Onay ya da red anında buraya düşer.</p>
+  </div>`;
+}
+
 function sekmeBasliklari(){
   const f=F, h=hesap(f.kalemler,f.indirim), kalan=r2(h.genel-odenen(f));
   const b=(k,t,alt)=>`<button type="button" class="${UI.isSekme===k?"on":""}" data-act="isSekme" data-v="${k}">${t}${alt?`<small>${alt}</small>`:""}</button>`;
@@ -1328,6 +1355,13 @@ const ACT={
   isYeniArac:()=>{ const a=S.araclar[F.id]; isYeni(a); },
   durumF:d=>{UI.durum=d.v;render();},
   bhAralik:d=>{UI.bhAralik=d.v;render();},
+  teklifOlustur:async(d,el)=>{ const f=F; if(!plakaKey(f.plaka)){ toast("Önce plakayı girin"); isSekmeSec("arac"); return; }
+    if(!f.kalemler.length){ toast("Önce parça ya da işçilik ekleyin"); return; }
+    if(!f.teklifToken){ const a=new Uint8Array(24); crypto.getRandomValues(a); f.teklifToken=Array.from(a,b=>"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"[b%57]).join(""); }
+    if(el){ el.disabled=true; el.textContent="Kaydediliyor…"; }
+    try{ const k=await isKaydetVeri(f,false); F=JSON.parse(JSON.stringify(S.isemirleri[k.id]||k)); modalCiz(); render(); toast("Teklif linki hazır. WhatsApp ile gönderebilirsiniz."); const el2=$("#f-teklif"); if(el2) el2.scrollIntoView({block:"center"}); }
+    catch(e){ toast(hataMesaj(e)); if(el){ el.disabled=false; el.textContent="Teklif linki oluştur"; } } },
+  teklifKopyala:async()=>{ try{ await navigator.clipboard.writeText(teklifLink(F)); toast("Link kopyalandı"); }catch(e){ prompt("Linki kopyalayın:",teklifLink(F)); } },
   sifreDegistir:()=>{ M="sifre"; F={}; modalCiz(); const el=$("#s-1"); if(el) el.focus(); },
   sifreKaydet:async()=>{ const a=$("#s-1").value, b=$("#s-2").value;
     if(a.length<8){ toast("Şifre en az 8 karakter olmalı"); return; } if(a!==b){ toast("İki şifre aynı değil"); return; }

@@ -227,13 +227,13 @@ const DEF_AYAR={firma:"AKCAN GROUP OTOMOTİV",adres:"",tel:"",vergi:"",teknisyen
   bakimSablon:"Sayın {musteri}, {plaka} plakalı aracınızın periyodik bakım zamanı yaklaştı ({tarih}). Randevu için bize ulaşabilirsiniz. {firma} {tel}",
   sartlar:"Aracınız teslim alındığı andaki durumuyla kayda geçmiştir. Teslim tarihinden itibaren 30 gün içinde alınmayan araçlardan firmamız sorumlu değildir. Değişen parçalar talep edilmezse imha edilir."};
 const COLS=["musteriler","araclar","isemirleri","stok","satislar"];
-const NAV=[["panel","Panel"],["isemirleri","İş Emirleri"],["satis","Hızlı Satış"],["araclar","Araçlar"],["musteriler","Müşteriler"],["stok","Stok"],["raporlar","Raporlar"],["ayarlar","Ayarlar"]];
+const NAV=[["panel","Panel"],["isemirleri","İş Emirleri"],["satis","Hızlı Satış"],["bhhareket","BizimHesap"],["araclar","Araçlar"],["musteriler","Müşteriler"],["stok","Stok"],["raporlar","Raporlar"],["ayarlar","Ayarlar"]];
 
 /* ---------- durum ---------- */
-const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},ayarlar:Object.assign({},DEF_AYAR)};
+const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},bhhareket:{},ayarlar:Object.assign({},DEF_AYAR)};
 let db=null, dl=null, mod="yukleniyor", yuklemeHata="", yuklenen=new Set();
 let view=hashView();
-const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:""},durum:"Açık",stokF:"Tümü",
+const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:"",bhhareket:""},bhAralik:"bugun",bhTip:"Tümü",durum:"Açık",stokF:"Tümü",
   rapor:{aralik:"ay",bas:"",bit:""},sepet:[],satisDepo:"",satisMusteri:"",satisYontem:"Nakit",satisIndirim:0,satisKasa:"",satisKasaYon:"",isGorunum:"liste",isSekme:"arac"};
 let F=null, M=null; // açık form ve modal türü
 let IMPORT=null, SENK=null;
@@ -378,7 +378,7 @@ function girisEkrani(hata){
 async function verileriYukle(){
   mod="yukleniyor"; render();
   try{
-    const o={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},ayarlar:{}};
+    const o={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},bhhareket:{},ayarlar:{}};
     for(let from=0;;from+=1000){
       const {data,error}=await sb.from("docs").select("col,id,data").order("col").order("id").range(from,from+999);
       if(error) throw error;
@@ -386,6 +386,7 @@ async function verileriYukle(){
       if(data.length<1000) break;
     }
     for(const c of COLS) S[c]=o[c];
+    S.bhhareket=o.bhhareket;
     AY=o.ayarlar; S.ayarlar=Object.assign({},DEF_AYAR,AY.genel||{}); SENK=AY.senkron||null;
     mod="bulut"; yuklemeHata=""; $("#gbar").style.display=""; render();
   }catch(e){ yuklemeHata="Veriler yüklenemedi: "+(e.message||e); mod="bulut"; render(); }
@@ -466,6 +467,7 @@ V.panel=()=>{
     <div class="tile"><div class="k">Bugünkü ciro</div><div class="v">${TL(ciroIs+ciroSa)}</div></div>
     <div class="tile"><div class="k">Bugünkü tahsilat</div><div class="v">${TL(tahsil)}</div></div>
     <div class="tile"><div class="k">Toplam alacak</div><div class="v">${TL(alacak)}</div></div>
+    ${(()=>{ const bh=bhHareketler(bg,bg+86400000), st=bh.filter(h=>bhSatisMi(h)&&!h.programNo); return `<a class="tile" href="#bhhareket" style="text-decoration:none;color:inherit"><div class="k">BizimHesap'ta bugün (${st.length} satış)</div><div class="v">${TL(st.reduce((t,h)=>t+num(h.tutar),0))}</div></a>`; })()}
   </div>
   <div class="grid2">
     <div class="card"><h2>Teslime hazır <span class="sub">${hazir.length} araç</span></h2><div class="list">${hazir.map(isRow).join("")||`<div class="empty">Teslim bekleyen araç yok.</div>`}</div></div>
@@ -608,6 +610,48 @@ function raporVeri(){
   const sa=list("satislar").filter(s=>!s.iptal&&s.tarih>=b&&s.tarih<e);
   return {b,e,ie,sa};
 }
+/* ---------- BizimHesap'ta yapılan satış ve tahsilatlar ---------- */
+function bhAralik(k){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth(), bg=gunBasi(now);
+  if(k==="bugun") return [bg,bg+86400000];
+  if(k==="dun") return [bg-86400000,bg];
+  if(k==="hafta"){ const g=(new Date(bg).getDay()+6)%7; return [bg-g*86400000,bg-g*86400000+7*86400000]; }
+  if(k==="ay") return [new Date(y,m,1).getTime(),new Date(y,m+1,1).getTime()];
+  if(k==="gecenay") return [new Date(y,m-1,1).getTime(),new Date(y,m,1).getTime()];
+  return [0,Infinity];
+}
+const bhSatisMi=h=>/^Satış/i.test(h.tip)&&h.yon==="borc";
+const bhTahsilatMi=h=>/^Tahsilat/i.test(h.tip);
+function bhHareketler(b,e){ return list("bhhareket").filter(h=>(h.tarih||0)>=b&&(h.tarih||0)<e); }
+const bhRow=h=>`<div class="row" tabindex="0" ${h.musteriId?`data-act="musAc" data-id="${esc(h.musteriId)}"`:""}>
+    <div class="lead"><span class="pill ${bhSatisMi(h)?"p-İşlemde":bhTahsilatMi(h)?"p-Tamamlandı":"p-Beklemede"}">${esc(h.tip)}</span></div>
+    <div class="main"><div class="t1">${esc(h.musteriAd||"-")}</div>
+      <div class="t2">${tarih(h.tarih)}${h.odeme?" · "+esc(h.odeme):""}${h.programNo?` · <b>Programdan: ${esc(h.programNo)}</b>`:" · BizimHesap'ta girildi"}${h.not&&!/^Satış\s*$/i.test(h.not)?" · "+esc(h.not.slice(0,80)):""}</div></div>
+    <div class="end"><b>${TL(h.tutar)}</b></div></div>`;
+V.bhhareket=()=>{
+  const [b,e]=bhAralik(UI.bhAralik), q=low(UI.q.bhhareket).trim();
+  let rs=bhHareketler(b,e);
+  const sat=rs.filter(bhSatisMi), tah=rs.filter(bhTahsilatMi), dogrudan=sat.filter(h=>!h.programNo);
+  if(UI.bhTip==="Satış") rs=sat; else if(UI.bhTip==="Tahsilat") rs=tah;
+  if(q) rs=rs.filter(h=>low([h.musteriAd,h.not,h.odeme,h.programNo].join(" ")).includes(q));
+  rs.sort((x,y)=>(y.tarih||0)-(x.tarih||0));
+  const tahYon={}; for(const h of tah){ const k=h.odeme||"Diğer"; tahYon[k]=(tahYon[k]||0)+num(h.tutar); }
+  const D=AY.bhhareket||{};
+  const ar=[["bugun","Bugün"],["dun","Dün"],["hafta","Bu hafta"],["ay","Bu ay"],["gecenay","Geçen ay"],["tumu","Tümü"]];
+  return `<div class="top"><h1>BizimHesap hareketleri</h1></div>
+  <p class="muted" style="margin:-6px 0 12px">BizimHesap'ta kesilen satış faturaları ve alınan tahsilatlar. Birkaç dakikada bir kendiliğinden yenilenir${D.son?` · son kontrol ${tarihSaat(D.son)}`:""}. BizimHesap ürün kalemlerini vermediği için yalnızca tutarlar görünür.</p>
+  <div class="toolbar chips">${ar.map(([k,t])=>`<button class="chip ${UI.bhAralik===k?"on":""}" data-act="bhAralik" data-v="${k}">${t}</button>`).join("")}</div>
+  <div class="tiles">
+    <div class="tile hl"><div class="k">Satış (${sat.length} fatura)</div><div class="v">${TL(sat.reduce((t,h)=>t+num(h.tutar),0))}</div></div>
+    <div class="tile"><div class="k">Doğrudan BizimHesap'ta (${dogrudan.length})</div><div class="v">${TL(dogrudan.reduce((t,h)=>t+num(h.tutar),0))}</div></div>
+    <div class="tile"><div class="k">Tahsilat (${tah.length})</div><div class="v">${TL(tah.reduce((t,h)=>t+num(h.tutar),0))}</div></div>
+    ${Object.entries(tahYon).sort((x,y)=>y[1]-x[1]).map(([k,v])=>`<div class="tile"><div class="k">Tahsilat · ${esc(k)}</div><div class="v">${TL(v)}</div></div>`).join("")}
+  </div>
+  <div class="toolbar"><input id="q-bh" class="search" data-q="bhhareket" placeholder="Müşteri, açıklama ya da program no ara" value="${esc(UI.q.bhhareket)}"></div>
+  <div class="toolbar chips">${["Tümü","Satış","Tahsilat"].map(t=>`<button class="chip ${UI.bhTip===t?"on":""}" data-act="bhTip" data-v="${t}">${t}</button>`).join("")}</div>
+  <div class="card"><div class="list">${rs.slice(0,400).map(bhRow).join("")||`<div class="empty">${list("bhhareket").length?"Bu aralıkta hareket yok.":"BizimHesap hareketleri henüz gelmedi. İlk aktarım birkaç dakika sürer."}</div>`}</div></div>`;
+};
+
 V.raporlar=()=>{
   const {b,e,ie,sa}=raporVeri(), R=UI.rapor;
   let sv={genel:0,parca:0,iscilik:0,kar:0,kdv:0}, pr={genel:0,kar:0,kdv:0};
@@ -1015,7 +1059,8 @@ function musHTML(){ const m=F, yeni=!m.id; const b=yeni?0:musteriBakiye(m.id);
   <div class="fg" style="margin-top:10px"><label class="f">Adres<textarea id="m-adres" data-m="adres">${esc(m.adres||"")}</textarea></label><label class="f">Not<textarea id="m-not" data-m="not">${esc(m.not||"")}</textarea></label></div>
   ${yeni?"":`<div class="sec"><h3>Tahsilat al</h3><div class="toolbar"><input id="m-od-tutar" placeholder="Tutar" inputmode="decimal" style="width:130px"><select id="m-od-yon" style="width:auto" data-odyon="1">${opt(YONTEMLER.filter(y=>y!=="Veresiye"),"Nakit")}</select><span id="m-od-kasa-k">${kasaSecHTML("m-od-kasa","","Nakit")}</span><input id="m-od-not" placeholder="Açıklama" style="max-width:220px"><button class="btn sm" data-act="musOdeme">Tahsilatı kaydet</button></div></div>
   <div class="sec"><h3>Araçlar</h3><div class="list">${ar.map(a=>`<div class="row" tabindex="0" data-act="aracAc" data-id="${esc(a.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(a.plaka))}</span></div><div class="main"><div class="t1">${esc([a.marka,a.model,a.yil].filter(Boolean).join(" "))}</div></div><div class="end"></div></div>`).join("")||`<div class="empty">Araç yok.</div>`}</div></div>
-  <div class="sec"><h3>Hesap hareketleri</h3>${har.length?`<div class="tw"><table><thead><tr><th>Tarih</th><th>Açıklama</th><th class="n">Borç</th><th class="n">Ödeme</th></tr></thead><tbody>${har.map(x=>`<tr ${x.id?`data-act="${x.k==="is"?"isAc":"satisAc"}" data-id="${esc(x.id)}" style="cursor:pointer"`:""}><td>${tarih(x.t)}</td><td>${esc(x.a)}</td><td class="n">${x.b?TL(x.b):""}</td><td class="n">${x.o?TL(x.o):""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Hareket yok.</div>`}</div>`}
+  ${(()=>{ const bh=list("bhhareket").filter(h=>h.musteriId===m.id).sort((x,y)=>(y.tarih||0)-(x.tarih||0)); return bh.length?`<div class="sec"><h3>BizimHesap hareketleri <span class="muted" style="font:500 14px var(--body)">son 1 yıl · ${bh.length} kayıt</span></h3><div class="tw"><table><thead><tr><th>Tarih</th><th>İşlem</th><th class="n">Borç</th><th class="n">Ödeme</th></tr></thead><tbody>${bh.slice(0,40).map(h=>`<tr><td>${tarih(h.tarih)}</td><td>${esc(h.tip)}${h.odeme?" · "+esc(h.odeme):""}${h.programNo?" · "+esc(h.programNo):""}</td><td class="n">${h.yon==="borc"?TL(h.tutar):""}</td><td class="n">${h.yon==="alacak"?TL(h.tutar):""}</td></tr>`).join("")}</tbody></table></div></div>`:""; })()}
+  <div class="sec"><h3>Programdaki hareketler</h3>${har.length?`<div class="tw"><table><thead><tr><th>Tarih</th><th>Açıklama</th><th class="n">Borç</th><th class="n">Ödeme</th></tr></thead><tbody>${har.map(x=>`<tr ${x.id?`data-act="${x.k==="is"?"isAc":"satisAc"}" data-id="${esc(x.id)}" style="cursor:pointer"`:""}><td>${tarih(x.t)}</td><td>${esc(x.a)}</td><td class="n">${x.b?TL(x.b):""}</td><td class="n">${x.o?TL(x.o):""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Hareket yok.</div>`}</div>`}
   <div class="actions"><div class="l">${yeni?"":waLink(m.tel,`Sayın ${m.ad}, ${S.ayarlar.firma} cari bakiyeniz: ${TL(b)}. ${S.ayarlar.tel||""}`,"Bakiyeyi WhatsApp'tan gönder")}${!yeni?`<button class="btn" data-act="isYeniMus">Yeni iş emri</button><button class="btn danger" data-act="musSil">Sil</button>`:""}</div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="musKaydet">Kaydet</button></div>`;
 }
 function aracHTML(){ const a=F, yeni=!a.id; const ies=yeni?[]:list("isemirleri").filter(r=>r.aracId===a.id).sort((x,y)=>(y.giris||0)-(x.giris||0));
@@ -1106,6 +1151,8 @@ const ACT={
   isYeniMus:()=>{ const m=F; const a=list("araclar").find(x=>x.musteriId===m.id); isYeni(a||null); if(!a&&F){F.musteriId=m.id;F.musteriAd=m.ad;F.musteriTel=m.tel||"";modalCiz();} },
   isYeniArac:()=>{ const a=S.araclar[F.id]; isYeni(a); },
   durumF:d=>{UI.durum=d.v;render();},
+  bhAralik:d=>{UI.bhAralik=d.v;render();},
+  bhTip:d=>{UI.bhTip=d.v;render();},
   isGorunum:d=>{UI.isGorunum=d.v;try{localStorage.setItem("akcan_isgor",d.v);}catch(e){}render();},
   isSekme:d=>isSekmeSec(d.v),
   gAc:d=>genelAc(+d.i),

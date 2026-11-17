@@ -194,7 +194,7 @@ const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},ayarlar:Obje
 let db=null, dl=null, mod="yukleniyor", yuklemeHata="", yuklenen=new Set();
 let view=hashView();
 const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:""},durum:"Açık",stokF:"Tümü",
-  rapor:{aralik:"ay",bas:"",bit:""},sepet:[],satisDepo:"",satisMusteri:"",satisYontem:"Nakit",satisIndirim:0};
+  rapor:{aralik:"ay",bas:"",bit:""},sepet:[],satisDepo:"",satisMusteri:"",satisYontem:"Nakit",satisIndirim:0,satisKasa:"",satisKasaYon:""};
 let F=null, M=null; // açık form ve modal türü
 let IMPORT=null, SENK=null;
 
@@ -519,6 +519,7 @@ V.satis=()=>{
       <div class="fg" style="margin-top:12px">
         <label class="f">Depo<select id="s-depo" data-u="satisDepo">${opt(dp,UI.satisDepo)}</select></label>
         <label class="f">Ödeme<select id="s-yon" data-u="satisYontem">${opt(YONTEMLER,UI.satisYontem)}</select></label>
+        ${UI.satisYontem!=="Veresiye"&&kasaListesi().length?`<label class="f">Hangi hesaba${kasaSecHTML("s-kasa",UI.satisDepo,UI.satisYontem,UI.satisKasaYon===UI.satisYontem+"|"+UI.satisDepo?UI.satisKasa:"").replace('<select id="s-kasa" style="width:auto;max-width:260px"','<select id="s-kasa" data-u="satisKasa"')}</label>`:""}
         <label class="f">Müşteri (isteğe bağlı)<input id="s-mus" data-u="satisMusteri" list="dl-mus" value="${esc(UI.satisMusteri)}" placeholder="Perakende müşteri"></label>
         <label class="f">İndirim (₺)<input id="s-ind" data-u="satisIndirim" value="${esc(UI.satisIndirim||"")}" inputmode="decimal"></label>
       </div>
@@ -642,6 +643,16 @@ function sablonDoldur(s,o){ const A=S.ayarlar; o=Object.assign({firma:A.firma||"
 function waLink(tel,msg,label){ const t=telKey(tel); if(t.length<10) return `<span class="muted" style="font-size:13px">Telefon yok</span>`;
   return `<a class="btn sm wa" href="https://wa.me/90${t}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">${esc(label||"WhatsApp")}</a>`; }
 
+/* ---------- BizimHesap kasa/banka seçimi ---------- */
+const kasaListesi=()=>((AY.bh||{}).kasaListesi||[]);
+const kasaAdi=id=>{ const k=kasaListesi().find(x=>x.id===id); return k?k.title:""; };
+const varsayilanKasa=(depo,yon)=>{ const K=(AY.bh||{}).kasalar||{}; return K[(depo||"")+"|"+yon]||K[yon]||""; };
+function kasaSecHTML(id,depo,yon,secili){
+  const kl=kasaListesi(); if(!kl.length||yon==="Veresiye") return "";
+  const sec=secili||varsayilanKasa(depo,yon);
+  return `<select id="${id}" style="width:auto;max-width:260px" aria-label="Hangi hesaba">${kl.map(k=>`<option value="${esc(k.id)}"${k.id===sec?" selected":""}>${esc(k.title)}</option>`).join("")}</select>`;
+}
+
 /* ---------- BizimHesap durumu ---------- */
 function bhDurumHTML(r){
   if(!r||!r.id) return "";
@@ -705,7 +716,7 @@ function isFormHTML(){
   </div>
   <div class="sec"><h3>Tahsilat <span class="muted" style="font:500 14px var(--body)" id="f-kalan">Ödenen ${TL(od)} · Kalan <b>${TL(h.genel-od)}</b></span></h3>
     <div id="f-tah">${tahHTML()}</div>
-    <div class="toolbar" style="margin-top:8px"><input id="f-tah-tutar" placeholder="Tutar" inputmode="decimal" style="width:130px"><select id="f-tah-yon" style="width:auto">${opt(YONTEMLER,"Nakit")}</select><button class="btn sm" data-act="tahEkle">Tahsilat ekle</button><button class="btn sm" data-act="tahKalan">Kalanı tahsil et</button></div>
+    <div class="toolbar" style="margin-top:8px"><input id="f-tah-tutar" placeholder="Tutar" inputmode="decimal" style="width:130px"><select id="f-tah-yon" style="width:auto" data-tahyon="1">${opt(YONTEMLER,"Nakit")}</select><span id="f-tah-kasa-k">${kasaSecHTML("f-tah-kasa",f.depo,"Nakit")}</span><button class="btn sm" data-act="tahEkle">Tahsilat ekle</button><button class="btn sm" data-act="tahKalan">Kalanı tahsil et</button></div>
   </div>
   <div class="sec"><h3>Dış servis</h3><div class="fg">
     ${inp("dis.firma","Firma",{val:f.dis.firma})}
@@ -734,7 +745,7 @@ function kalemHTML(){
     <td class="n" id="k-tut-${i}">${TL(num(k.adet)*num(k.fiyat))}</td><td><button class="btn sm danger" data-act="kalemSil" data-i="${i}" aria-label="Satırı sil">×</button></td></tr>`).join("")}</tbody></table>`;
 }
 function tahHTML(){ if(!F.tahsilatlar.length) return `<div class="muted">Tahsilat yok.</div>`;
-  return `<table><tbody>${F.tahsilatlar.map((t,i)=>`<tr><td>${tarihSaat(t.t)}</td><td>${esc(t.yontem)}</td><td class="n">${TL(t.tutar)}</td><td class="right"><button class="btn sm danger" data-act="tahSil" data-i="${i}" aria-label="Tahsilatı sil">×</button></td></tr>`).join("")}</tbody></table>`; }
+  return `<table><tbody>${F.tahsilatlar.map((t,i)=>`<tr><td>${tarihSaat(t.t)}</td><td>${esc(t.yontem)}${t.kasaId?` <span class="muted">· ${esc(kasaAdi(t.kasaId))}</span>`:""}</td><td class="n">${TL(t.tutar)}</td><td class="right"><button class="btn sm danger" data-act="tahSil" data-i="${i}" aria-label="Tahsilatı sil">×</button></td></tr>`).join("")}</tbody></table>`; }
 function isToplamYenile(){
   const h=hesap(F.kalemler,F.indirim), od=odenen(F);
   const t=$("#f-tot"); if(t) t.innerHTML=totHTML(h);
@@ -808,7 +819,7 @@ function musHTML(){ const m=F, yeni=!m.id; const b=yeni?0:musteriBakiye(m.id);
   ${yeni?"":`<div class="tiles"><div class="tile hl"><div class="k">Bakiye</div><div class="v ${b>0?"late":""}">${TL(b)}</div></div><div class="tile"><div class="k">Araç</div><div class="v">${ar.length}</div></div></div>`}
   <div class="fg">${inp("ad","Ad soyad / firma")}${inp("tel","Telefon","tel")}${inp("eposta","E-posta","email")}${inp("vergi","Vergi no / TC")}${inp("devir","Devir bakiyesi (₺, + borç / − avans)")}</div>
   <div class="fg" style="margin-top:10px"><label class="f">Adres<textarea id="m-adres" data-m="adres">${esc(m.adres||"")}</textarea></label><label class="f">Not<textarea id="m-not" data-m="not">${esc(m.not||"")}</textarea></label></div>
-  ${yeni?"":`<div class="sec"><h3>Tahsilat al</h3><div class="toolbar"><input id="m-od-tutar" placeholder="Tutar" inputmode="decimal" style="width:130px"><select id="m-od-yon" style="width:auto">${opt(YONTEMLER.filter(y=>y!=="Veresiye"),"Nakit")}</select><input id="m-od-not" placeholder="Açıklama" style="max-width:220px"><button class="btn sm" data-act="musOdeme">Tahsilatı kaydet</button></div></div>
+  ${yeni?"":`<div class="sec"><h3>Tahsilat al</h3><div class="toolbar"><input id="m-od-tutar" placeholder="Tutar" inputmode="decimal" style="width:130px"><select id="m-od-yon" style="width:auto" data-odyon="1">${opt(YONTEMLER.filter(y=>y!=="Veresiye"),"Nakit")}</select><span id="m-od-kasa-k">${kasaSecHTML("m-od-kasa","","Nakit")}</span><input id="m-od-not" placeholder="Açıklama" style="max-width:220px"><button class="btn sm" data-act="musOdeme">Tahsilatı kaydet</button></div></div>
   <div class="sec"><h3>Araçlar</h3><div class="list">${ar.map(a=>`<div class="row" tabindex="0" data-act="aracAc" data-id="${esc(a.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(a.plaka))}</span></div><div class="main"><div class="t1">${esc([a.marka,a.model,a.yil].filter(Boolean).join(" "))}</div></div><div class="end"></div></div>`).join("")||`<div class="empty">Araç yok.</div>`}</div></div>
   <div class="sec"><h3>Hesap hareketleri</h3>${har.length?`<div class="tw"><table><thead><tr><th>Tarih</th><th>Açıklama</th><th class="n">Borç</th><th class="n">Ödeme</th></tr></thead><tbody>${har.map(x=>`<tr ${x.id?`data-act="${x.k==="is"?"isAc":"satisAc"}" data-id="${esc(x.id)}" style="cursor:pointer"`:""}><td>${tarih(x.t)}</td><td>${esc(x.a)}</td><td class="n">${x.b?TL(x.b):""}</td><td class="n">${x.o?TL(x.o):""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Hareket yok.</div>`}</div>`}
   <div class="actions"><div class="l">${yeni?"":waLink(m.tel,`Sayın ${m.ad}, ${S.ayarlar.firma} cari bakiyeniz: ${TL(b)}. ${S.ayarlar.tel||""}`,"Bakiyeyi WhatsApp'tan gönder")}${!yeni?`<button class="btn" data-act="isYeniMus">Yeni iş emri</button><button class="btn danger" data-act="musSil">Sil</button>`:""}</div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="musKaydet">Kaydet</button></div>`;
@@ -903,8 +914,8 @@ const ACT={
   kalemSerbest:d=>{ F.kalemler.push({tip:d.tip,stokId:null,kod:"",ad:d.tip==="parca"?"":"İşçilik",adet:1,fiyat:0,kdv:20,alis:0}); $("#f-kal").innerHTML=kalemHTML(); isToplamYenile(); const el=document.getElementById("k-ad-"+(F.kalemler.length-1)); if(el){el.focus();el.select();} },
   kalemSil:d=>{ F.kalemler.splice(+d.i,1); $("#f-kal").innerHTML=kalemHTML(); isToplamYenile(); },
   kalemEkle:d=>kalemEkleStok(S.stok[d.id]),
-  tahEkle:()=>{ const t=num($("#f-tah-tutar").value); if(t<=0){toast("Tutar girin");return;} F.tahsilatlar.push({t:Date.now(),tutar:r2(t),yontem:$("#f-tah-yon").value}); $("#f-tah").innerHTML=tahHTML(); $("#f-tah-tutar").value=""; isToplamYenile(); toast("Tahsilat eklendi. Kaydetmeyi unutmayın."); },
-  tahKalan:()=>{ const k=r2(hesap(F.kalemler,F.indirim).genel-odenen(F)); if(k<=0){toast("Kalan tutar yok");return;} F.tahsilatlar.push({t:Date.now(),tutar:k,yontem:$("#f-tah-yon").value}); $("#f-tah").innerHTML=tahHTML(); isToplamYenile(); toast("Kalan tutar tahsil edildi. Kaydetmeyi unutmayın."); },
+  tahEkle:()=>{ const t=num($("#f-tah-tutar").value); if(t<=0){toast("Tutar girin");return;} F.tahsilatlar.push({t:Date.now(),tutar:r2(t),yontem:$("#f-tah-yon").value,kasaId:($("#f-tah-kasa")||{}).value||""}); $("#f-tah").innerHTML=tahHTML(); $("#f-tah-tutar").value=""; isToplamYenile(); toast("Tahsilat eklendi. Kaydetmeyi unutmayın."); },
+  tahKalan:()=>{ const k=r2(hesap(F.kalemler,F.indirim).genel-odenen(F)); if(k<=0){toast("Kalan tutar yok");return;} F.tahsilatlar.push({t:Date.now(),tutar:k,yontem:$("#f-tah-yon").value,kasaId:($("#f-tah-kasa")||{}).value||""}); $("#f-tah").innerHTML=tahHTML(); isToplamYenile(); toast("Kalan tutar tahsil edildi. Kaydetmeyi unutmayın."); },
   tahSil:d=>{ F.tahsilatlar.splice(+d.i,1); $("#f-tah").innerHTML=tahHTML(); isToplamYenile(); },
   bakim:d=>{ const b=new Date(); b.setMonth(b.getMonth()+(+d.ay)); F.sonrakiBakimTarih=gunBasi(b.getTime()); const el=$("#f-sonrakiBakimTarih"); if(el) el.value=dInput(F.sonrakiBakimTarih); },
   bakimKm:d=>{ const k=num(F.km); if(!k){toast("Önce kilometreyi girin");return;} F.sonrakiBakimKm=String(k+(+d.km)); const el=$("#f-sonrakiBakimKm"); if(el) el.value=F.sonrakiBakimKm; },
@@ -927,7 +938,7 @@ const ACT={
       for(const r of list("isemirleri")) if(r.musteriId===id&&(r.musteriAd!==m.ad||r.musteriTel!==m.tel)&&!ACIK_DEGIL.includes(r.durum)) await put("isemirleri",r.id,Object.assign({},r,{musteriAd:m.ad,musteriTel:m.tel}));
       toast("Müşteri kaydedildi"); kapat(); }catch(e){toast(hataMesaj(e));} },
   musOdeme:async()=>{ const t=num($("#m-od-tutar").value); if(t<=0){toast("Tutar girin");return;} const m=S.musteriler[F.id]; if(!m) return;
-    try{ const od=(m.odemeler||[]).concat([{t:Date.now(),tutar:r2(t),yontem:$("#m-od-yon").value,not:$("#m-od-not").value,bhAktarildi:false}]); await put("musteriler",m.id,Object.assign({},m,{odemeler:od,bhBekleyen:true})); F.odemeler=od; toast("Tahsilat kaydedildi"); modalCiz(); }catch(e){toast(hataMesaj(e));} },
+    try{ const od=(m.odemeler||[]).concat([{t:Date.now(),tutar:r2(t),yontem:$("#m-od-yon").value,kasaId:($("#m-od-kasa")||{}).value||"",not:$("#m-od-not").value,bhAktarildi:false}]); await put("musteriler",m.id,Object.assign({},m,{odemeler:od,bhBekleyen:true})); F.odemeler=od; toast("Tahsilat kaydedildi"); modalCiz(); }catch(e){toast(hataMesaj(e));} },
   musSil:async()=>{ const n=list("isemirleri").filter(r=>r.musteriId===F.id).length; if(!await onay(`${F.ad} silinsin mi?${n?` ${n} iş emri kaydı kalır.`:""}`,"Sil")) return; try{ await del("musteriler",F.id); toast("Müşteri silindi"); kapat(); }catch(e){toast(hataMesaj(e));} },
   stokAc:d=>{ const s=S.stok[d.id]; if(!s) return; F=JSON.parse(JSON.stringify(s)); M="stok"; modalCiz(); },
   stokYeni:()=>{ F={id:null,tur:"urun",kod:"",ad:"",barkod:"",oem:"",marka:"",alis:"",satis:"",kdv:20,birim:"Adet",kritik:"",miktar:{},hareketler:[]}; M="stok"; modalCiz(); },
@@ -957,7 +968,7 @@ const ACT={
     try{ let m=null; if(String(UI.satisMusteri).trim()) m=await musteriCoz(UI.satisMusteri,"",null);
       const kal=UI.sepet.map(k=>Object.assign({},k,{adet:num(k.adet),fiyat:num(k.fiyat)})), h=hesap(kal,UI.satisIndirim);
       const s={id:uid(),no:yeniNo("satislar","STS"),tarih:Date.now(),depo:UI.satisDepo,musteriId:m?m.id:null,musteriAd:m?m.ad:"",kalemler:kal,indirim:num(UI.satisIndirim),
-        tahsilatlar:[{t:Date.now(),tutar:h.genel,yontem:yon}],iptal:false,stokEtkisi:{},bhAktarildi:false};
+        tahsilatlar:[{t:Date.now(),tutar:h.genel,yontem:yon,kasaId:yon==="Veresiye"?"":(($("#s-kasa")||{}).value||varsayilanKasa(UI.satisDepo,yon))}],iptal:false,stokEtkisi:{},bhAktarildi:false};
       await stokEtkisiUygula(s,"satis"); await put("satislar",s.id,s);
       UI.sepet=[]; UI.satisMusteri=""; UI.satisIndirim=0; render(); toast(`${s.no} tamamlandı: ${TL(h.genel)}`);
     }catch(e){ toast(hataMesaj(e)); if(btn) btn.disabled=false; } },
@@ -1025,6 +1036,9 @@ document.addEventListener("change",e=>{
   if(d.f==="plaka"&&F){ F.plaka=plakaFmt(t.value); t.value=F.plaka; plakaDoldur(); return; }
   if(d.f==="musteriAd"&&F){ musteriDoldur(); return; }
   if(d.f==="durum"&&F){ const h=$("#modal .hd h2"); if(h) h.innerHTML=`${F.id?esc(F.no):"Yeni iş emri"} ${pill(F.durum)}`; return; }
+  if(d.tahyon!==undefined&&F){ const k=$("#f-tah-kasa-k"); if(k) k.innerHTML=kasaSecHTML("f-tah-kasa",F.depo,t.value); return; }
+  if(d.odyon!==undefined){ const k=$("#m-od-kasa-k"); if(k) k.innerHTML=kasaSecHTML("m-od-kasa","",t.value); return; }
+  if(d.u==="satisKasa"){ UI.satisKasa=t.value; UI.satisKasaYon=UI.satisYontem+"|"+UI.satisDepo; return; }
   if(d.u!==undefined){ UI[d.u]=t.value; render(); return; }
   if(t.id==="yedek-dosya"&&t.files&&t.files[0]){ const fr=new FileReader(); fr.onload=async()=>{ t.value="";
       let o; try{ o=JSON.parse(fr.result); }catch(err){ toast("Dosya okunamadı. Programın indirdiği yedek dosyasını seçin."); return; }

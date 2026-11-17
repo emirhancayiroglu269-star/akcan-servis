@@ -94,7 +94,7 @@ async function satisGonder(col: string, r: Rec) {
     if (!adaylar.length) throw new Error("BizimHesap'ta Perakende Müşteri carisi bulunamadı (Ayarlar)");
     const res = await tahsilatEkle(adaylar, {
       paymentType: ODEME[t.yontem] || "1", currency: "TL", amount: r2(num(t.tutar)), paymentDate: bhTarih(t.t),
-      note: `${r.no} tahsilat`, cashId: AYAR.kasalar?.[`${r.depo}|${t.yontem}`] || AYAR.kasalar?.[t.yontem] || undefined,
+      note: `${r.no} tahsilat`, cashId: t.kasaId || AYAR.kasalar?.[`${r.depo}|${t.yontem}`] || AYAR.kasalar?.[t.yontem] || undefined,
     }, m?.eposta);
     kalan.push({ anahtar: anahtar(t), guid: res.guid });
   }
@@ -117,7 +117,7 @@ async function musteriGonder(m: Rec) {
     if (o.bhAktarildi || num(o.tutar) <= 0) continue;
     const res = await tahsilatEkle(adaylar, {
       paymentType: ODEME[o.yontem] || "1", currency: "TL", amount: r2(num(o.tutar)), paymentDate: bhTarih(o.t),
-      note: o.not || "Akcan Oto Servis tahsilat", cashId: AYAR.kasalar?.[o.yontem] || undefined,
+      note: o.not || "Akcan Oto Servis tahsilat", cashId: o.kasaId || AYAR.kasalar?.[o.yontem] || undefined,
     }, m.eposta);
     o.bhAktarildi = true; o.bhGuid = res.guid;
   }

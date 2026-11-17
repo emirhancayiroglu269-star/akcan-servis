@@ -51,3 +51,9 @@ drop policy if exists "yetkili gunceller" on public.docs;
 create policy "yetkili okur" on public.docs for select to authenticated using ((select public.akcan_rol()) <> 'yok' and (col <> 'maliyet' or (select public.akcan_rol()) = 'yonetici'));
 create policy "yetkili ekler" on public.docs for insert to authenticated with check ((select public.akcan_rol()) <> 'yok' and (col not in ('ayarlar', 'maliyet') or (select public.akcan_rol()) = 'yonetici'));
 create policy "yetkili gunceller" on public.docs for update to authenticated using ((select public.akcan_rol()) <> 'yok' and (col not in ('ayarlar', 'maliyet') or (select public.akcan_rol()) = 'yonetici')) with check ((select public.akcan_rol()) <> 'yok' and (col not in ('ayarlar', 'maliyet') or (select public.akcan_rol()) = 'yonetici'));
+
+-- Mevcut verileri taşı (uygulandı: 17.11.2026; BizimHesap'a gönderim tetiklenmesin)
+-- alter table public.docs disable trigger bh_push_tetikle;
+-- insert maliyet/<stokId> from stok.alis; insert maliyet/fis:<col>:<id> from kalemler.alis
+-- update docs set data = data - 'alis' where col = 'stok';  update isemirleri/satislar (trigger kalem alis'ini siler)
+-- alter table public.docs enable trigger bh_push_tetikle;

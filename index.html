@@ -231,20 +231,20 @@ const DEF_AYAR={firma:"AKCAN GROUP OTOMOTİV",adres:"",tel:"",vergi:"",teknisyen
   sablon:"Sayın {musteri}, {plaka} plakalı aracınızın servis durumu: {durum}. Tutar: {tutar}. {firma} {tel}",
   bakimSablon:"Sayın {musteri}, {plaka} plakalı aracınızın periyodik bakım zamanı yaklaştı ({tarih}). Randevu için bize ulaşabilirsiniz. {firma} {tel}",
   sartlar:"Aracınız teslim alındığı andaki durumuyla kayda geçmiştir. Teslim tarihinden itibaren 30 gün içinde alınmayan araçlardan firmamız sorumlu değildir. Değişen parçalar talep edilmezse imha edilir."};
-const COLS=["musteriler","araclar","isemirleri","stok","satislar","giderler","kasakapanis"];
-const NAV=[["panel","Panel"],["isemirleri","İş Emirleri"],["satis","Hızlı Satış"],["bhhareket","BizimHesap"],["kasa","Kasa"],["giderler","Giderler"],["araclar","Araçlar"],["musteriler","Müşteriler"],["stok","Stok"],["raporlar","Raporlar"],["ayarlar","Ayarlar"]];
+const COLS=["musteriler","araclar","isemirleri","stok","satislar","giderler","kasakapanis","randevular"];
+const NAV=[["panel","Panel"],["isemirleri","İş Emirleri"],["randevu","Randevu"],["satis","Hızlı Satış"],["bhhareket","BizimHesap"],["kasa","Kasa"],["giderler","Giderler"],["araclar","Araçlar"],["musteriler","Müşteriler"],["stok","Stok"],["raporlar","Raporlar"],["ayarlar","Ayarlar"]];
 
 /* ---------- durum ---------- */
-const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},bhhareket:{},ayarlar:Object.assign({},DEF_AYAR)};
+const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},randevular:{},bhhareket:{},ayarlar:Object.assign({},DEF_AYAR)};
 let db=null, dl=null, mod="yukleniyor", yuklemeHata="", yuklenen=new Set();
 let view=hashView();
-const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:"",bhhareket:""},bhAralik:"bugun",bhTip:"Tümü",kasaGun:"",kasaDepo:"Tümü",kasaSayim:"",kasaAcilis:"",kasaNot:"",giderAralik:"ay",giderKat:"Tümü",durum:"Açık",stokF:"Tümü",
+const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:"",bhhareket:""},bhAralik:"bugun",bhTip:"Tümü",kasaGun:"",kasaDepo:"Tümü",kasaSayim:"",kasaAcilis:"",kasaNot:"",giderAralik:"ay",giderKat:"Tümü",randevuGun:"",durum:"Açık",stokF:"Tümü",
   rapor:{aralik:"ay",bas:"",bit:""},sepet:[],satisDepo:"",satisMusteri:"",satisYontem:"Nakit",satisIndirim:0,satisKasa:"",satisKasaYon:"",isGorunum:"liste",isSekme:"arac"};
 let F=null, M=null; // açık form ve modal türü
 let IMPORT=null, SENK=null;
 let ROL="yonetici", KULLANICI={eposta:"",ad:"",rol:"yonetici"};
 const ROL_AD={yonetici:"Yönetici",usta:"Usta",kasiyer:"Kasiyer"};
-const ROL_GORUNUM={usta:["panel","isemirleri","araclar","musteriler","stok"],kasiyer:["panel","isemirleri","satis","araclar","musteriler","stok","kasa"]};
+const ROL_GORUNUM={usta:["panel","isemirleri","randevu","araclar","musteriler","stok"],kasiyer:["panel","isemirleri","randevu","satis","araclar","musteriler","stok","kasa"]};
 const izin=v=>ROL==="yonetici"||(ROL_GORUNUM[ROL]||[]).includes(v);
 const YON=()=>ROL==="yonetici";
 function rolUygula(){
@@ -396,7 +396,7 @@ async function verileriYukle(){
     if(re) throw re;
     ROL=rl||"yok"; KULLANICI={eposta:(ud&&ud.user&&ud.user.email)||"",ad:"",rol:ROL};
     if(ROL==="yok"){ mod="giris"; $("#gbar").style.display="none"; $("#nav").innerHTML=""; $("#main").innerHTML=`<div class="card" style="max-width:420px;margin:40px auto"><h2>Yetki verilmemiş</h2><p>${esc(KULLANICI.eposta)} hesabına bu programda yetki tanımlanmamış. Yöneticinizden sizi Ayarlar → Kullanıcılar bölümünden eklemesini isteyin.</p><button class="btn" data-act="cikis">Çıkış yap</button></div>`; return; }
-    const o={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},bhhareket:{},ayarlar:{}};
+    const o={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},randevular:{},bhhareket:{},ayarlar:{}};
     for(let from=0;;from+=1000){
       const {data,error}=await sb.from("docs").select("col,id,data").order("col").order("id").range(from,from+999);
       if(error) throw error;
@@ -496,11 +496,13 @@ V.panel=()=>{
   <div class="grid2">
     <div class="card"><h2>Teslime hazır <span class="sub">${hazir.length} araç</span></h2><div class="list">${hazir.map(isRow).join("")||`<div class="empty">Teslim bekleyen araç yok.</div>`}</div></div>
     <div class="card"><h2>Geciken ve bekleyen <span class="sub">3 gün ve üzeri ya da teslim tarihi geçmiş</span></h2><div class="list">${gec.map(isRow).join("")||`<div class="empty">Geciken iş yok.</div>`}</div></div>
+    ${(()=>{ const bg1=gunBasi(Date.now()), R=list("randevular").filter(x=>x.tarih>=bg1&&x.tarih<bg1+86400000&&x.durum!=="İptal").sort((a,b)=>a.tarih-b.tarih);
+      return `<div class="card"><h2>Bugünkü randevular <span class="sub">${R.length}</span></h2><div class="list">${R.map(randevuRow).join("")||`<div class="empty">Bugün randevu yok. <a href="#randevu">Randevu ekle</a></div>`}</div></div>`; })()}
     ${(()=>{ const B=bekleyenSiparisler(), bg0=gunBasi(Date.now()); return `<div class="card"><h2>Bekleyen parçalar <span class="sub">${B.length} sipariş</span></h2><div class="list">${B.slice(0,15).map(({r,x,i})=>{ const gec=x.beklenen&&x.beklenen<bg0, bugun=x.beklenen&&x.beklenen>=bg0&&x.beklenen<bg0+86400000;
       return `<div class="row" tabindex="0" data-act="isAc" data-id="${esc(r.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(r.plaka))}</span></div><div class="main"><div class="t1">${esc(x.ad||"Parça")}</div><div class="t2">${esc(x.tedarikci||"Tedarikçi yok")} · <span class="${gec?"late":""}">${x.beklenen?(bugun?"bugün bekleniyor":gec?"gecikti, "+tarih(x.beklenen):tarih(x.beklenen)):"tarih yok"}</span></div></div><div class="end"><button class="btn sm" data-act="siparisGeldi" data-id="${esc(r.id)}" data-i="${i}">Geldi</button></div></div>`;}).join("")||`<div class="empty">Bekleyen parça siparişi yok.</div>`}</div></div>`; })()}
     <div class="card"><h2>Dış serviste <span class="sub">${dis.length} araç</span></h2><div class="list">${dis.map(r=>`<div class="row" tabindex="0" data-act="isAc" data-id="${esc(r.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(r.plaka))}</span></div><div class="main"><div class="t1">${esc((r.dis&&r.dis.firma)||"Firma girilmemiş")}</div><div class="t2">Gönderim ${tarih(r.dis&&r.dis.gonderim)||"-"} · Dönüş ${tarih(r.dis&&r.dis.donus)||"-"}</div></div><div class="end">${pill(r.durum)}</div></div>`).join("")||`<div class="empty">Dış serviste araç yok.</div>`}</div></div>
     <div class="card"><h2>Periyodik bakım <span class="sub">30 gün içinde</span></h2><div class="list">${bakim.map(a=>{const m=S.musteriler[a.musteriId]||{}; const gecti=a.sonrakiBakimTarih<now;
-      return `<div class="row" tabindex="0" data-act="aracAc" data-id="${esc(a.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(a.plaka))}</span></div><div class="main"><div class="t1">${esc(m.ad||"-")}</div><div class="t2 ${gecti?"late":""}">${tarih(a.sonrakiBakimTarih)}${a.sonrakiBakimKm?" · "+esc(a.sonrakiBakimKm)+" km":""}</div></div><div class="end">${waLink(m.tel,sablonDoldur(S.ayarlar.bakimSablon,{musteri:m.ad,plaka:plakaFmt(a.plaka),tarih:tarih(a.sonrakiBakimTarih)}),"Hatırlat")}</div></div>`;}).join("")||`<div class="empty">Yaklaşan bakım yok.</div>`}</div></div>
+      return `<div class="row" tabindex="0" data-act="aracAc" data-id="${esc(a.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(a.plaka))}</span></div><div class="main"><div class="t1">${esc(m.ad||"-")}</div><div class="t2 ${gecti?"late":""}">${tarih(a.sonrakiBakimTarih)}${a.sonrakiBakimKm?" · "+esc(a.sonrakiBakimKm)+" km":""}</div></div><div class="end" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${waLink(m.tel,sablonDoldur(S.ayarlar.bakimSablon,{musteri:m.ad,plaka:plakaFmt(a.plaka),tarih:tarih(a.sonrakiBakimTarih)}),"Hatırlat")}<button class="btn sm" data-act="randevuArac" data-id="${esc(a.id)}">Randevu</button></div></div>`;}).join("")||`<div class="empty">Yaklaşan bakım yok.</div>`}</div></div>
     <div class="card"><h2>Kritik stok <span class="sub">${kritik.length} kalem</span></h2><div class="list">${kritik.slice(0,12).map(stRow).join("")||`<div class="empty">Kritik seviyede ürün yok.</div>`}</div></div>
     <div class="card"><h2>Son iş emirleri</h2><div class="list">${ie.sort((a,b)=>(b.giris||0)-(a.giris||0)).slice(0,6).map(isRow).join("")||`<div class="empty">Henüz iş emri yok.</div>`}</div></div>
   </div>`;
@@ -929,7 +931,7 @@ V.ayarlar=()=>{const A=S.ayarlar;
     <label class="f" style="margin-top:10px">Adres<textarea id="a-adres" data-a="adres">${esc(A.adres||"")}</textarea></label>
   </div>
   <div class="card" style="margin-top:16px"><h2>Servis ayarları</h2>
-    <div class="fg">${f("teknisyenler","Teknisyenler (virgülle ayırın)")}${f("depolar","Depolar (virgülle ayırın)")}${f("onek","İş emri no öneki","SRV")}${f("primOrani","Usta primi (işçiliğin %'si)","örn. 10")}</div>
+    <div class="fg">${f("teknisyenler","Teknisyenler (virgülle ayırın)")}${f("depolar","Depolar (virgülle ayırın)")}${f("onek","İş emri no öneki","SRV")}${f("primOrani","Usta primi (işçiliğin %'si)","örn. 10")}${f("randevuKapasite","Günlük randevu kapasitesi","8")}</div>
     <label class="f" style="margin-top:10px">WhatsApp durum mesajı <span style="font-weight:400">{musteri} {plaka} {durum} {tutar} {no} {firma} {tel}</span><textarea id="a-sablon" data-a="sablon">${esc(A.sablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">WhatsApp bakım hatırlatma <span style="font-weight:400">{musteri} {plaka} {tarih} {firma} {tel}</span><textarea id="a-bakim" data-a="bakimSablon">${esc(A.bakimSablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">Teslim formu şartları<textarea id="a-sartlar" data-a="sartlar">${esc(A.sartlar||"")}</textarea></label>
@@ -1111,6 +1113,49 @@ function isFormHTML(){
     ${f.id?`<button class="btn" data-act="fisIndir">Fiş / teslim formu yazdır</button><button class="btn" data-act="etiketIndir">Barkod etiketi yazdır</button><span id="f-wa">${waLink(f.musteriTel,sablonDoldur(S.ayarlar.sablon,{musteri:f.musteriAd,plaka:plakaFmt(f.plaka),durum:f.durum,tutar:TL(h.genel),no:f.no}),"WhatsApp ile bildir")}</span><button class="btn danger yon-only" data-act="isSil">Sil</button>`:""}
   </div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="isKaydet">Kaydet</button></div>`;
 }
+/* ---------- Randevu ---------- */
+const RDURUM={"Bekleniyor":"p-İşlemde","Geldi":"p-Tamamlandı","Gelmedi":"p-İptal","İptal":"p-Teslim"};
+const saat=ms=>new Date(ms).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+const randevuRow=x=>`<div class="row" tabindex="0" data-act="randevuAc" data-id="${esc(x.id)}">
+  <div class="lead" style="font-weight:800;font-variant-numeric:tabular-nums">${saat(x.tarih)}</div>
+  <div class="main"><div class="t1">${x.plaka?`<span class="plaka" style="font-size:14px">${esc(plakaFmt(x.plaka))}</span> `:""}${esc(x.musteriAd||"")}</div><div class="t2">${esc([x.is,x.depo,x.sure?x.sure+" dk":""].filter(Boolean).join(" · "))}</div></div>
+  <div class="end"><span class="pill ${RDURUM[x.durum]||"p-Beklemede"}">${esc(x.durum)}</span>${x.durum==="Bekleniyor"?`<div style="margin-top:4px"><button class="btn sm pri" data-act="randevuGeldi" data-id="${esc(x.id)}">Geldi · iş emri aç</button></div>`:x.isEmriId&&S.isemirleri[x.isEmriId]?`<div class="t2">${esc(S.isemirleri[x.isEmriId].no)}</div>`:""}</div></div>`;
+V.randevu=()=>{
+  if(!UI.randevuGun) UI.randevuGun=dInput(Date.now());
+  const b=fromInput(UI.randevuGun), kap=num(S.ayarlar.randevuKapasite)||8;
+  const gunSay=t=>list("randevular").filter(x=>x.tarih>=t&&x.tarih<t+86400000&&x.durum!=="İptal").length;
+  const hb=b-((new Date(b).getDay()+6)%7)*86400000;
+  const hafta=[0,1,2,3,4,5,6].map(i=>{ const t=new Date(new Date(hb).getFullYear(),new Date(hb).getMonth(),new Date(hb).getDate()+i).getTime(); return {t,n:gunSay(t)}; });
+  const R=list("randevular").filter(x=>x.tarih>=b&&x.tarih<b+86400000).sort((a,c)=>a.tarih-c.tarih);
+  const GA=["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
+  return `<div class="top"><h1>Randevu</h1><button class="btn pri" data-act="randevuYeni">Yeni randevu</button></div>
+  <div class="toolbar"><button class="btn sm" data-act="randevuKaydir" data-v="-7">‹ Önceki hafta</button><button class="btn sm" data-act="randevuKaydir" data-v="0">Bugün</button><button class="btn sm" data-act="randevuKaydir" data-v="7">Sonraki hafta ›</button><input type="date" data-u="randevuGun" value="${esc(UI.randevuGun)}" style="width:auto" aria-label="Gün"></div>
+  <div class="tiles" style="grid-template-columns:repeat(7,minmax(0,1fr))">${hafta.map((g,i)=>{ const sec=dInput(g.t)===UI.randevuGun, dolu=Math.min(1,g.n/kap); return `<button class="tile${sec?" hl":""}" data-act="randevuGunSec" data-v="${dInput(g.t)}" style="text-align:left;cursor:pointer;border:${sec?"2px solid var(--accent)":"1px solid var(--line)"}"><div class="k">${GA[i]} ${new Date(g.t).getDate()}</div><div class="v" style="font-size:20px">${g.n}<span class="muted" style="font-size:13px">/${kap}</span></div><div style="height:5px;border-radius:3px;background:var(--line);margin-top:4px;overflow:hidden"><div style="height:100%;width:${(dolu*100).toFixed(0)}%;background:${dolu>=1?"var(--bad)":dolu>=.75?"var(--warn)":"var(--ok)"}"></div></div></button>`; }).join("")}</div>
+  <div class="card"><h2>${new Date(b).toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"})} <span class="sub">${R.filter(x=>x.durum!=="İptal").length} randevu · kapasite ${kap}</span></h2><div class="list">${R.map(randevuRow).join("")||`<div class="empty">Bu gün randevu yok.</div>`}</div></div>`;
+};
+function randevuHTML(){ const x=F, yeni=!x.id;
+  const msg=`Sayın ${x.musteriAd||"müşterimiz"}, ${x.plaka?plakaFmt(x.plaka)+" plakalı aracınız için ":""}${x.tarihStr?new Date(fromInput(x.tarihStr)).toLocaleString("tr-TR",{day:"numeric",month:"long",weekday:"long",hour:"2-digit",minute:"2-digit"}):""} randevunuzu hatırlatırız. ${S.ayarlar.firma||""} ${S.ayarlar.tel||""}`;
+  return `<div class="hd"><h2>${yeni?"Yeni randevu":"Randevu"}</h2><button class="btn" data-act="kapat">Kapat</button></div>
+  <div class="fg">
+    <label class="f">Tarih ve saat<input type="datetime-local" id="r-tarih" data-m="tarihStr" value="${esc(x.tarihStr)}" step="900"></label>
+    <label class="f">Süre (dk)<select id="r-sure" data-m="sure">${opt(["30","60","90","120","180","240"],String(x.sure||60))}</select></label>
+    <label class="f">Plaka<input id="r-plaka" data-m="plaka" list="dl-plaka-r" value="${esc(x.plaka?plakaFmt(x.plaka):"")}" placeholder="34 ABC 123"></label>
+    <label class="f">Müşteri<input id="r-mus" data-m="musteriAd" value="${esc(x.musteriAd||"")}"></label>
+    <label class="f">Telefon<input id="r-tel" type="tel" data-m="tel" value="${esc(x.tel||"")}"></label>
+    <label class="f">Depo<select id="r-depo" data-m="depo">${opt(depolar(),x.depo)}</select></label>
+  </div>
+  <label class="f" style="margin-top:10px">Yapılacak iş<input id="r-is" data-m="is" value="${esc(x.is||"")}" placeholder="Periyodik bakım, fren kontrolü…"></label>
+  <datalist id="dl-plaka-r">${list("araclar").map(a=>`<option value="${esc(plakaFmt(a.plaka))}">${esc((S.musteriler[a.musteriId]||{}).ad||"")}</option>`).join("")}</datalist>
+  ${yeni?"":`<div class="toolbar" style="margin-top:10px">${["Bekleniyor","Gelmedi","İptal"].map(d=>`<button class="chip ${x.durum===d?"on":""}" data-act="randevuDurum" data-v="${d}">${d}</button>`).join("")}${x.isEmriId&&S.isemirleri[x.isEmriId]?`<button class="btn sm" data-act="isAc" data-id="${esc(x.isEmriId)}">İş emrini aç (${esc(S.isemirleri[x.isEmriId].no)})</button>`:""}</div>`}
+  <div class="actions"><div class="l">${x.tel||x.plaka?waLink(x.tel,msg,"WhatsApp ile hatırlat"):""}${yeni?"":`<button class="btn danger yon-only" data-act="randevuSil">Sil</button>`}</div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="randevuKaydet">Kaydet</button></div>`;
+}
+function randevuYeni(arac,tarihMs){
+  const m=arac?S.musteriler[arac.musteriId]:null;
+  let t=tarihMs; if(!t){ const d=fromInput(UI.randevuGun)||gunBasi(Date.now()); const n=new Date(); t=dInput(d)===dInput(n.getTime())?new Date(Math.ceil(n.getTime()/1800000)*1800000).getTime():d+9*3600000; }
+  F={id:null,tarihStr:dtInput(t),sure:60,plaka:arac?arac.plaka:"",aracId:arac?arac.id:null,musteriAd:m?m.ad:"",tel:m?m.tel||"":"",depo:depolar()[0]||"",is:arac&&arac.sonrakiBakimTarih?"Periyodik bakım":"",durum:"Bekleniyor"};
+  M="randevu"; modalCiz();
+}
+
 /* ---------- parça siparişleri ---------- */
 const TEDARIKCI_VAR=["Otomarmara","Kaymazlar","Neko","Martaş","Başbuğ","Özaş"];
 function tedarikciler(){ const s=new Set(TEDARIKCI_VAR); for(const r of list("isemirleri")) for(const x of r.siparisler||[]) if(x.tedarikci) s.add(x.tedarikci); return [...s].sort((a,b)=>a.localeCompare(b,"tr")); }
@@ -1255,6 +1300,7 @@ async function isKaydetVeri(f,hizli){
     await stokEtkisiUygula(f,"is");
     if(f.bhAktarildi){ f.bhAktarildi=false; f.bhDegisti=true; } else if(f.bhAktarildi===undefined) f.bhAktarildi=false;
     const kayit=JSON.parse(JSON.stringify(f)); await put("isemirleri",f.id,kayit);
+    if(f.randevuId&&S.randevular[f.randevuId]&&!S.randevular[f.randevuId].isEmriId) await put("randevular",f.randevuId,Object.assign({},S.randevular[f.randevuId],{isEmriId:f.id,durum:"Geldi"}));
     return kayit;
 }
 async function isKaydet(){
@@ -1335,9 +1381,9 @@ let onayCb=null;
 function onay(msg,btn){ return new Promise(res=>{ onayCb=res; $("#modal").insertAdjacentHTML("beforeend",`<div class="ov" id="onay-ov" style="z-index:30"><div class="sheet narrow" role="dialog" aria-modal="true"><h2 style="font-size:22px;margin-bottom:8px">Emin misiniz?</h2><p>${esc(msg)}</p><div class="actions"><button class="btn" data-act="onayHayir">Vazgeç</button><button class="btn pri" data-act="onayEvet">${esc(btn||"Evet")}</button></div></div></div>`); }); }
 function modalCiz(){
   if(!M){ $("#modal").innerHTML=""; document.body.style.overflow=""; return; }
-  const html=M==="is"?isFormHTML():M==="mus"?musHTML():M==="arac"?aracHTML():M==="stok"?stokHTML():M==="satis"?satisHTML():M==="fis"?fisOnizHTML():M==="kisayol"?kisayolHTML():M==="gider"?giderHTML():M==="sifre"?sifreHTML():"";
+  const html=M==="is"?isFormHTML():M==="mus"?musHTML():M==="arac"?aracHTML():M==="stok"?stokHTML():M==="satis"?satisHTML():M==="fis"?fisOnizHTML():M==="kisayol"?kisayolHTML():M==="gider"?giderHTML():M==="sifre"?sifreHTML():M==="randevu"?randevuHTML():"";
   const ov=$("#modal .ov:not(#onay-ov)"), sc=ov?ov.scrollTop:0;
-  $("#modal").innerHTML=`<div class="ov" data-ovkapat="1"><div class="sheet${M==="satis"||M==="fis"||M==="kisayol"||M==="gider"||M==="sifre"?" narrow":""}" role="dialog" aria-modal="true">${html}</div></div>`;
+  $("#modal").innerHTML=`<div class="ov" data-ovkapat="1"><div class="sheet${M==="satis"||M==="fis"||M==="kisayol"||M==="gider"||M==="sifre"||M==="randevu"?" narrow":""}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nov=$("#modal .ov"); if(nov) nov.scrollTop=sc; document.body.style.overflow="hidden";
   if(KAMERA_VAR) document.querySelectorAll("#modal [data-kamera]").forEach(b=>b.style.display="");
 }
@@ -1386,6 +1432,26 @@ const ACT={
   durumF:d=>{UI.durum=d.v;render();},
   bhAralik:d=>{UI.bhAralik=d.v;render();},
   siparisEkle:()=>{ siparisYeni(""); },
+  randevuYeni:()=>randevuYeni(null),
+  randevuArac:d=>{ const a=S.araclar[d.id]; if(a) randevuYeni(a); },
+  randevuAc:d=>{ const x=S.randevular[d.id]; if(!x) return; F=Object.assign({},x,{tarihStr:dtInput(x.tarih)}); M="randevu"; modalCiz(); },
+  randevuGunSec:d=>{ UI.randevuGun=d.v; render(); },
+  randevuKaydir:d=>{ const n=+d.v; UI.randevuGun=n?dInput((fromInput(UI.randevuGun)||Date.now())+n*86400000+3600000):dInput(Date.now()); render(); },
+  randevuDurum:d=>{ F.durum=d.v; modalCiz(); },
+  randevuKaydet:async()=>{ const x=F, t=fromInput(x.tarihStr); if(!t){ toast("Tarih ve saat seçin"); return; }
+    if(!plakaKey(x.plaka)&&!String(x.musteriAd||"").trim()){ toast("Plaka ya da müşteri adı girin"); return; }
+    const pk=plakaKey(x.plaka), a=pk?list("araclar").find(y=>plakaKey(y.plaka)===pk):null, m=a?S.musteriler[a.musteriId]:null;
+    const id=x.id||uid(), eski=S.randevular[id]||{};
+    const kap=num(S.ayarlar.randevuKapasite)||8, bg=gunBasi(t), say=list("randevular").filter(y=>y.id!==id&&y.tarih>=bg&&y.tarih<bg+86400000&&y.durum!=="İptal").length;
+    if(!x.id&&say>=kap&&!await onay(`O gün ${say} randevu var (kapasite ${kap}). Yine de eklensin mi?`,"Ekle")) return;
+    await put("randevular",id,{tarih:t,sure:num(x.sure)||60,plaka:pk,aracId:a?a.id:(x.aracId||null),musteriAd:String(x.musteriAd||"").trim()||(m?m.ad:""),tel:String(x.tel||"").trim()||(m?m.tel||"":""),depo:x.depo||"",is:x.is||"",durum:x.durum||"Bekleniyor",isEmriId:eski.isEmriId||null,olusturma:eski.olusturma||Date.now()});
+    toast("Randevu kaydedildi"); UI.randevuGun=dInput(t); kapat(); },
+  randevuSil:async()=>{ if(!await onay("Randevu silinsin mi?","Sil")) return; await del("randevular",F.id); toast("Randevu silindi"); kapat(); },
+  randevuGeldi:async d=>{ const x=S.randevular[d.id]; if(!x) return;
+    const a=x.aracId?S.araclar[x.aracId]:(x.plaka?list("araclar").find(y=>plakaKey(y.plaka)===x.plaka):null);
+    isYeni(a||null); if(!a){ F.plaka=x.plaka?plakaFmt(x.plaka):""; F.musteriAd=x.musteriAd||""; F.musteriTel=x.tel||""; }
+    F.sikayet=x.is||""; F.depo=x.depo||F.depo; F.randevuId=x.id; modalCiz();
+    await put("randevular",x.id,Object.assign({},x,{durum:"Geldi",gelis:Date.now()})); },
   siparisKalem:d=>{ siparisYeni(d.v); },
   siparisSil:d=>{ F.siparisler.splice(+d.i,1); modalCiz(); },
   siparisGeldiForm:d=>{ const x=F.siparisler[+d.i]; x.durum="Geldi"; x.gelis=Date.now(); const kalan=F.siparisler.filter(y=>y.durum!=="Geldi").length;
@@ -1536,7 +1602,7 @@ const ACT={
   onayHayir:()=>{ const o=$("#onay-ov"); if(o) o.remove(); if(onayCb){const c=onayCb;onayCb=null;c(false);} }
 };
 
-for(const k of ["isSil","musSil","aracSil","stokSil","satisIptal","tahSil","giderSil","ayarKaydet","bhKaydet","kulEkle","kulCikar"]){ const f=ACT[k]; if(f) ACT[k]=(...a)=>YON()?f(...a):toast("Bu işlem için yönetici yetkisi gerekir"); }
+for(const k of ["isSil","musSil","aracSil","stokSil","satisIptal","tahSil","giderSil","randevuSil","ayarKaydet","bhKaydet","kulEkle","kulCikar"]){ const f=ACT[k]; if(f) ACT[k]=(...a)=>YON()?f(...a):toast("Bu işlem için yönetici yetkisi gerekir"); }
 document.addEventListener("click",e=>{
   if(!e.target.closest(".gsearch")) genelKapat();
   if(e.target.closest("select,option")&&e.target.closest(".row,.kart")) return;

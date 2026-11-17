@@ -607,10 +607,11 @@ function grafik(g){
 
 function bhAyarHTML(){
   const B=AY.bh||{}, kl=B.kasaListesi||[];
-  const sec=y=>`<label class="f">${esc(y)} tahsilatı hangi kasaya<select id="bh-k-${esc(y).replace(/\W/g,"")}" data-bhk="${esc(y)}"><option value="">Seçin</option>${kl.map(k=>`<option value="${esc(k.id)}"${(B.kasalar||{})[y]===k.id?" selected":""}>${esc(k.title)}</option>`).join("")}</select></label>`;
+  const sec=(y,i)=>`<label class="f">${esc(y.replace("|"," · "))}<select id="bh-k-${i}" data-bhk="${esc(y)}"><option value="">Seçin</option>${kl.map(k=>`<option value="${esc(k.id)}"${(B.kasalar||{})[y]===k.id?" selected":""}>${esc(k.title)}</option>`).join("")}</select></label>`;
+  const anahtarlar=[]; for(const d of depolar()) for(const y of ["Nakit","Kredi Kartı","Havale/EFT"]) anahtarlar.push(d+"|"+y); for(const y of ["Nakit","Kredi Kartı","Havale/EFT"]) anahtarlar.push(y);
   return `<div class="card" style="margin-top:16px"><h2>BizimHesap bağlantısı <span class="sub">${SENK&&SENK.son?"son eşitleme "+tarihSaat(SENK.son):"henüz eşitlenmedi"}</span></h2>
   ${SENK&&SENK.durum==="hata"?`<div class="banner bad">${esc(SENK.not||"")}</div>`:SENK&&SENK.not?`<p class="muted" style="margin-top:0">${esc(SENK.not)}</p>`:""}
-  <div class="fg">${["Nakit","Kredi Kartı","Havale/EFT"].map(sec).join("")}
+  <p class="muted" style="font-size:13px;margin:0 0 8px">Tahsilatların BizimHesap'ta hangi kasaya ya da POS'a gireceğini seçin. Depo yazmayan satırlar müşteri carisinden alınan tahsilatlar içindir.</p><div class="fg">${anahtarlar.map(sec).join("")}
   <label class="f">İşçilik satırları için BizimHesap hizmet kodu<input id="bh-isc" data-bhi="1" value="${esc(B.iscilikKod||"")}" placeholder="ör. HZM-001"></label></div>
   <p class="muted" style="font-size:13px">Perakende satışlar: ${esc(B.perakendeAd||"Perakende Müşteri")}${B.perakendeId?"":" (BizimHesap'ta bulunamadı)"}. Programdaki satışlar BizimHesap'a taslak sipariş olarak gider.</p>
   <div class="toolbar"><button class="btn" data-act="bhKaydet">Bağlantı ayarlarını kaydet</button><button class="btn" data-act="bhEsitle">Şimdi eşitle</button><button class="btn" data-act="cikis">Çıkış yap</button></div></div>`;

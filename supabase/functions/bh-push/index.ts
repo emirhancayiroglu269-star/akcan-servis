@@ -82,7 +82,7 @@ async function satisGonder(col: string, r: Rec) {
     if (!custId) throw new Error("BizimHesap'ta Perakende Müşteri carisi bulunamadı (Ayarlar)");
     const res = await bhPostFirm("/b2b/AddCollection", {
       paymentType: ODEME[t.yontem] || "1", currency: "TL", amount: r2(num(t.tutar)), paymentDate: bhTarih(t.t),
-      note: `${r.no} tahsilat`, cashId: AYAR.kasalar?.[t.yontem] || undefined,
+      note: `${r.no} tahsilat`, cashId: AYAR.kasalar?.[`${r.depo}|${t.yontem}`] || AYAR.kasalar?.[t.yontem] || undefined,
       customer: { customerId: custId, email: m?.eposta || "musteri@akcangroup.local" },
     });
     kalan.push({ anahtar: anahtar(t), guid: res.guid });

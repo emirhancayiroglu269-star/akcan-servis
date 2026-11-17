@@ -5,7 +5,10 @@ type Rec = Record<string, any>;
 const plakaRe = /\b(\d{2})\s*([A-ZÇĞİÖŞÜ]{1,3})\s*(\d{2,5})\b/;
 const h = (s: string) => { let a = 5381, b = 52711; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = (a * 33) ^ c; b = (b * 31) ^ c; a |= 0; b |= 0; } return (a >>> 0).toString(36) + (b >>> 0).toString(36); };
 const depoAdi = (t: string) => /VEL[İI]BABA/i.test(t) ? "Velibaba" : /SULTANBEYL/i.test(t) ? "Sultanbeyli" : t.trim();
-const ayni = (a: Rec, b: Rec, keys: string[]) => keys.every((k) => JSON.stringify(a?.[k] ?? null) === JSON.stringify(b?.[k] ?? null));
+const kanon = (v: unknown): string => v && typeof v === "object" && !Array.isArray(v)
+  ? "{" + Object.keys(v as Rec).sort().map((k) => JSON.stringify(k) + ":" + kanon((v as Rec)[k])).join(",") + "}"
+  : Array.isArray(v) ? "[" + v.map(kanon).join(",") + "]" : JSON.stringify(v ?? null);
+const ayni = (a: Rec, b: Rec, keys: string[]) => keys.every((k) => kanon(a?.[k]) === kanon(b?.[k]));
 
 async function upsertMany(rows: { col: string; id: string; data: Rec }[]) {
   for (let i = 0; i < rows.length; i += 500) {

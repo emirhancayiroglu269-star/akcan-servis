@@ -836,7 +836,8 @@ V.raporlar=()=>{
   for(const r of ie){const g=gi(r.kapanis); if(g) g.s+=hesap(r.kalemler,r.indirim).genel;}
   for(const s of sa){const g=gi(s.tarih); if(g) g.p+=hesap(s.kalemler,s.indirim).genel;}
   // teknisyen
-  const tek={}; for(const r of ie){const k=r.teknisyen||"Atanmamış"; tek[k]=tek[k]||{n:0,c:0,i:0}; const h=hesap(r.kalemler,r.indirim); tek[k].n++; tek[k].c+=h.genel; tek[k].i+=h.iscilik;}
+  const tek={}; for(const r of ie){const k=r.teknisyen||"Atanmamış"; tek[k]=tek[k]||{n:0,c:0,i:0,p:0,gun:0,gunN:0}; const h=hesap(r.kalemler,r.indirim); tek[k].n++; tek[k].c+=h.genel; tek[k].i+=h.iscilik; tek[k].p+=h.parca; if(r.giris&&r.kapanis){ tek[k].gun+=Math.max(0,(r.kapanis-r.giris)/86400000); tek[k].gunN++; }}
+  const primOran=num(S.ayarlar.primOrani);
   // parçalar
   const par={}; for(const r of ie.concat(sa)) for(const k of r.kalemler||[]){ const key=(k.kod||"")+"|"+k.ad; par[key]=par[key]||{kod:k.kod,ad:k.ad,adet:0,tutar:0,tip:k.tip}; par[key].adet+=num(k.adet); par[key].tutar+=num(k.adet)*num(k.fiyat);}
   const parL=Object.values(par).filter(p=>p.tip==="parca").sort((a,b)=>b.tutar-a.tutar).slice(0,12);
@@ -887,7 +888,9 @@ V.raporlar=()=>{
     <div class="card"><h2>Depo bazında satış</h2>${depL.length?depL.map(([k,v])=>`<div class="bar-row"><span>${esc(k)} <span class="muted">(${v.n})</span></span><div class="bar-bg"><div class="bar" style="width:${(v.c/depMax*100).toFixed(1)}%"></div></div><span class="right">${TL(v.c)}</span></div>`).join(""):`<div class="empty">Bu aralıkta satış yok.</div>`}</div>
     <div class="card"><h2>Haftanın günlerine göre ciro</h2>${fisSay?hg.map(x=>`<div class="bar-row"><span>${x.g}</span><div class="bar-bg"><div class="bar" style="width:${(x.c/hgMax*100).toFixed(1)}%"></div></div><span class="right">${TL(x.c)}</span></div>`).join(""):`<div class="empty">Bu aralıkta satış yok.</div>`}</div>
     <div class="card"><h2>En çok alışveriş yapan müşteriler</h2>${musL.length?`<div class="tw"><table><thead><tr><th>Müşteri</th><th class="n">Fiş</th><th class="n">Tutar</th></tr></thead><tbody>${musL.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${TL(v.c)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Kayıt yok.</div>`}</div>
-    <div class="card"><h2>Teknisyen performansı</h2>${tekL.length?tekL.map(([k,v])=>`<div class="bar-row"><span>${esc(k)} <span class="muted">(${v.n})</span></span><div class="bar-bg"><div class="bar" style="width:${(v.c/tekMax*100).toFixed(1)}%"></div></div><span class="right">${TL(v.c)}</span></div>`).join(""):`<div class="empty">Bu aralıkta tamamlanan iş yok.</div>`}</div>
+    <div class="card" id="usta-performans"><h2>Usta performansı ve prim <span class="sub">${primOran?`prim: işçiliğin %${NF.format(primOran).replace(/,00$/,"")}'si`:`prim oranı Ayarlar'dan girilir`}</span></h2>${tekL.length?`<div class="tw"><table><thead><tr><th>Usta</th><th class="n">İş</th><th class="n">İşçilik</th><th class="n">Parça</th><th class="n">Ort. süre</th>${primOran?`<th class="n">Prim</th>`:""}</tr></thead><tbody>${tekL.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${TL(v.i)}</td><td class="n">${TL(v.p)}</td><td class="n">${v.gunN?NF.format(v.gun/v.gunN).replace(/,00$/,"")+" gün":"-"}</td>${primOran?`<td class="n"><b>${k==="Atanmamış"?"-":TL(v.i*primOran/100)}</b></td>`:""}</tr>`).join("")}</tbody></table></div>
+      <div style="margin-top:10px">${tekL.map(([k,v])=>`<div class="bar-row"><span>${esc(k)}</span><div class="bar-bg"><div class="bar" style="width:${(v.c/tekMax*100).toFixed(1)}%"></div></div><span class="right">${TL(v.c)}</span></div>`).join("")}</div>
+      <p class="muted" style="font-size:13px;margin:6px 0 0">Seçili aralıkta tamamlanan/teslim edilen iş emirleri. İşçilik ve parça KDV hariç değil, müşteriye kesilen tutardır; prim işçilik tutarı üzerinden hesaplanır. Ort. süre: girişten tamamlanmaya geçen gün.</p>`:`<div class="empty">Bu aralıkta tamamlanan iş yok.</div>`}</div>
     <div class="card"><h2>En çok satan parçalar</h2>${parL.length?`<div class="tw"><table><thead><tr><th>Kod</th><th>Parça</th><th class="n">Adet</th><th class="n">Tutar</th></tr></thead><tbody>${parL.map(p=>`<tr><td>${esc(p.kod)}</td><td>${esc(p.ad)}</td><td class="n">${NF.format(p.adet).replace(/,00$/,"")}</td><td class="n">${TL(p.tutar)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Kayıt yok.</div>`}</div>
     <div class="card"><h2>İşçilik kalemleri</h2>${iscL.length?`<div class="tw"><table><thead><tr><th>İşçilik</th><th class="n">Adet</th><th class="n">Tutar</th></tr></thead><tbody>${iscL.map(p=>`<tr><td>${esc(p.ad)}</td><td class="n">${NF.format(p.adet).replace(/,00$/,"")}</td><td class="n">${TL(p.tutar)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Kayıt yok.</div>`}
       <h2 style="margin-top:16px">Açılan iş emirleri <span class="sub">giriş tarihine göre</span></h2><div class="chips">${Object.entries(durum).map(([d,n])=>`${pill(d)} <b style="margin-right:8px">${n}</b>`).join("")||`<span class="muted">Kayıt yok.</span>`}</div></div>
@@ -926,7 +929,7 @@ V.ayarlar=()=>{const A=S.ayarlar;
     <label class="f" style="margin-top:10px">Adres<textarea id="a-adres" data-a="adres">${esc(A.adres||"")}</textarea></label>
   </div>
   <div class="card" style="margin-top:16px"><h2>Servis ayarları</h2>
-    <div class="fg">${f("teknisyenler","Teknisyenler (virgülle ayırın)")}${f("depolar","Depolar (virgülle ayırın)")}${f("onek","İş emri no öneki","SRV")}</div>
+    <div class="fg">${f("teknisyenler","Teknisyenler (virgülle ayırın)")}${f("depolar","Depolar (virgülle ayırın)")}${f("onek","İş emri no öneki","SRV")}${f("primOrani","Usta primi (işçiliğin %'si)","örn. 10")}</div>
     <label class="f" style="margin-top:10px">WhatsApp durum mesajı <span style="font-weight:400">{musteri} {plaka} {durum} {tutar} {no} {firma} {tel}</span><textarea id="a-sablon" data-a="sablon">${esc(A.sablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">WhatsApp bakım hatırlatma <span style="font-weight:400">{musteri} {plaka} {tarih} {firma} {tel}</span><textarea id="a-bakim" data-a="bakimSablon">${esc(A.bakimSablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">Teslim formu şartları<textarea id="a-sartlar" data-a="sartlar">${esc(A.sartlar||"")}</textarea></label>
@@ -1037,7 +1040,7 @@ function yeniIs(arac){
     sonrakiBakimTarih:arac?arac.sonrakiBakimTarih||null:null,sonrakiBakimKm:arac?arac.sonrakiBakimKm||"":"",not:"",stokEtkisi:{}};
 }
 function isAc(id,sekme){ const r=S.isemirleri[id]; if(!r) return; F=JSON.parse(JSON.stringify(r)); F.dis=F.dis||{}; F.kalemler=F.kalemler||[]; F.tahsilatlar=F.tahsilatlar||[]; UI.isSekme=sekme||(KAPALI.includes(F.durum)?"tahsilat":"parca"); M="is"; modalCiz(); }
-function isYeni(arac){ F=yeniIs(arac); UI.isSekme="arac"; M="is"; modalCiz(); setTimeout(()=>{const el=document.getElementById("f-plaka"); if(el&&!F.plaka) el.focus();},30); }
+function isYeni(arac){ F=yeniIs(arac); if(ROL==="usta"&&KULLANICI.ad&&teknisyenler().includes(KULLANICI.ad)) F.teknisyen=KULLANICI.ad; UI.isSekme="arac"; M="is"; modalCiz(); setTimeout(()=>{const el=document.getElementById("f-plaka"); if(el&&!F.plaka) el.focus();},30); }
 
 function isFormHTML(){
   const f=F, h=hesap(f.kalemler,f.indirim), od=odenen(f), dp=depolar(), tk=teknisyenler();

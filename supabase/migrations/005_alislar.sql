@@ -1,0 +1,3 @@
+-- Alış faturaları (alislar) ve tedarikçi ödemeleri (tedarikciler) BizimHesap'a gönderilir; alışlar yalnızca yönetici okur.
+-- bh_push_tetikle: alislar (bhAktarildi=false) ve tedarikciler (bhBekleyen=true) eklendi.
+-- RLS: okuma maliyet+alislar yalnızca yönetici; yazma ayarlar+maliyet+alislar+tedarikciler yalnızca yönetici.

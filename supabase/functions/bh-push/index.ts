@@ -103,6 +103,67 @@ async function satisGonder(col: string, r: Rec) {
   r.bhAktarildi = true; r.bhDegisti = false; r.bhHata = null;
 }
 
+// --- Alış faturası (invoiceType 5) ve tedarikçi ödemeleri
+function tedarikciBH(t: Rec | null, ad: string) {
+  return {
+    customerId: t?.kod || t?.bhId || undefined, title: t?.ad || ad || "Tedarikçi", address: t?.adres || "-",
+    taxNo: String(t?.vergiNo || "").replace(/\D/g, "") || undefined, phone: telRakam(t?.tel || ""),
+  };
+}
+async function odemeEkle(t: Rec | null, ad: string, o: Rec, not: string, depo?: string) {
+  return await bhPostFirm("/b2b/AddSupplierPayment", {
+    PaymentType: ODEME[o.yontem] || "1", Currency: "TL", Amount: r2(num(o.tutar)), PaymentDate: bhTarih(o.t), Note: not,
+    CashId: o.kasaId || (depo ? AYAR.kasalar?.[`${depo}|${o.yontem}`] : undefined) || AYAR.kasalar?.[o.yontem] || undefined,
+    Supplier: { SupplierId: t?.bhId || undefined, Title: t?.ad || ad, Email: t?.eposta || "tedarikci@akcangroup.com", TaxNo: String(t?.vergiNo || "").replace(/\D/g, "") || undefined },
+  });
+}
+async function alisGonder(r: Rec) {
+  const t = r.tedarikciId ? await getDoc("tedarikciler", r.tedarikciId) : null;
+  if (r.iptal) {
+    if (r.bhGuid) { await bhPostFirm("/b2b/cancelinvoice", { guid: r.bhGuid }); r.bhGuid = null; }
+  } else {
+    const kalemler = (r.kalemler || []).filter((k: Rec) => num(k.adet) > 0);
+    if (!kalemler.length) throw new Error("Kalem yok");
+    let N = 0, T = 0; const details = [];
+    for (const k of kalemler) {
+      const st = k.stokId ? await getDoc("stok", k.stokId) : null;
+      const kdv = num(k.kdv), adet = num(k.adet), net = r2(adet * num(k.fiyat)), tax = r2(net * kdv / 100);
+      N += net; T += tax;
+      details.push({ productId: st?.kod || k.kod || undefined, productName: st?.ad || k.ad, barcode: st?.barkod || undefined,
+        warehouseId: AYAR.depolar?.[r.depo] || undefined, taxRate: kdv, quantity: adet, unitPrice: r2(num(k.fiyat)), grossPrice: net, discount: 0, net, tax, total: r2(net + tax) });
+    }
+    const res = await bhPostFirm("/b2b/addinvoice", {
+      invoiceNo: r.no, invoiceType: 5, note: `${r.no}${r.faturaNo ? " · Fatura " + r.faturaNo : ""} · Akcan Oto Servis alış`,
+      dates: { invoiceDate: bhTarih(r.tarih), dueDate: bhTarih(r.vade || r.tarih) },
+      customer: tedarikciBH(t, r.tedarikciAd), amounts: { currency: "TL", gross: r2(N), discount: 0, net: r2(N), tax: r2(T), total: r2(N + T) }, details,
+    });
+    r.bhGuid = res.guid; r.bhFaturali = false; r.bhGonderim = Date.now();
+    r.bhSon = Date.now(); await putDoc("alislar", r.id, r);
+  }
+  const gonderilen: Rec[] = r.bhGonderilenOdeme || [];
+  const istenen = r.iptal ? [] : (r.odemeler || []).filter((o: Rec) => num(o.tutar) > 0);
+  const anahtar = (o: Rec) => `${o.t}|${num(o.tutar)}|${o.yontem}`;
+  const ist = new Set(istenen.map(anahtar)); const kalan: Rec[] = [];
+  for (const g of gonderilen) { if (ist.has(g.anahtar)) kalan.push(g); else await bhPostFirm("/document/CancelCollection", { guid: g.guid }); }
+  const ks = new Set(kalan.map((g) => g.anahtar));
+  for (const o of istenen) {
+    if (ks.has(anahtar(o))) continue;
+    const res = await odemeEkle(t, r.tedarikciAd, o, `${r.no} ödeme`, r.depo);
+    kalan.push({ anahtar: anahtar(o), guid: res.guid });
+  }
+  r.bhGonderilenOdeme = kalan;
+  r.odemeler = (r.odemeler || []).map((o: Rec) => ({ ...o, bhAktarildi: kalan.some((g) => g.anahtar === anahtar(o)) }));
+  r.bhAktarildi = true; r.bhHata = null;
+}
+async function tedarikciOdemeGonder(t: Rec) {
+  for (const o of t.odemeler || []) {
+    if (o.bhAktarildi || num(o.tutar) <= 0) continue;
+    const res = await odemeEkle(t, t.ad, o, o.not || "Akcan Oto Servis tedarikçi ödemesi");
+    o.bhAktarildi = true; o.bhGuid = res.guid;
+  }
+  t.bhBekleyen = false; t.bhHata = null;
+}
+
 async function musteriGonder(m: Rec) {
   if (!m.bhId && m.bhAktarildi === false) {
     const data = await bhPostToken("/b2b/addcustomer", {
@@ -145,6 +206,12 @@ async function isle(col: string, id: string) {
     } else if (col === "musteriler") {
       if (!(d.bhAktarildi === false || d.bhBekleyen === true)) return "gerek yok";
       await musteriGonder(d);
+    } else if (col === "alislar") {
+      if (d.bhAktarildi !== false) return "gerek yok";
+      await alisGonder(d);
+    } else if (col === "tedarikciler") {
+      if (d.bhBekleyen !== true) return "gerek yok";
+      await tedarikciOdemeGonder(d);
     } else if (col === "stok") {
       if (d.kaynak === "BizimHesap") return "gerek yok";
       await stokGonder(d);
@@ -169,10 +236,11 @@ Deno.serve(async (req) => {
     sonuc[`${body.col}/${body.id}`] = await isle(body.col, body.id);
   } else {
     // Tarama: sıra önemli (önce stok ve yeni müşteriler)
-    for (const col of ["stok", "musteriler", "isemirleri", "satislar"]) {
+    for (const col of ["stok", "musteriler", "isemirleri", "satislar", "alislar", "tedarikciler"]) {
       const { data, error } = await sb.from("docs").select("id,data").eq("col", col).or(
         col === "stok" ? "data->>kaynak.is.null,data->>kaynak.neq.BizimHesap"
         : col === "musteriler" ? "data->>bhAktarildi.eq.false,data->>bhBekleyen.eq.true"
+        : col === "tedarikciler" ? "data->>bhBekleyen.eq.true,data->>bhBekleyen.eq.true"
         : "data->>bhAktarildi.eq.false",
       );
       if (error) { sonuc[col] = "sorgu hatası: " + error.message; continue; }

@@ -55,18 +55,34 @@ Deno.serve(async (req) => {
       if (customers.length < 1000) break;
     }
     const perakende = musBH.find((c) => /perakende/i.test(c.title));
+    // --- Tedarikçiler
+    let tedYaz = 0;
+    try {
+      const { suppliers } = await bhGet("/b2b/suppliers");
+      const mevcutTed = new Map((await allDocs("tedarikciler")).map((r) => [r.id, r.data]));
+      const yaz: { col: string; id: string; data: Rec }[] = [];
+      const TALAN = ["ad", "kod", "tel", "adres", "vergiNo", "vergiDairesi", "eposta", "bakiye", "bhId"];
+      for (const t of suppliers || []) {
+        const eski = mevcutTed.get(t.id) || {};
+        const yeni: Rec = { ...eski, ad: t.title || "", kod: t.code || "", tel: t.phone || "", adres: t.address || "", vergiNo: t.taxno || "", vergiDairesi: t.taxoffice || "",
+          eposta: t.email || "", bakiye: trNum(t.balance), bhId: t.id, kaynak: "BizimHesap" };
+        if (!eski.olusturma) { yeni.olusturma = now; yeni.odemeler = []; }
+        if (!ayni(eski, yeni, TALAN)) { yeni.guncelleme = now; yaz.push({ col: "tedarikciler", id: t.id, data: yeni }); }
+      }
+      await upsertMany(yaz); tedYaz = yaz.length;
+    } catch (e) { not.push("tedarikçi: " + (e as Error).message); }
     await putDoc("ayarlar", "bh", { ...eskiAyar, depolar, kasalar, kasaListesi: cashiers, depoListesi: warehouses,
       perakendeId: perakende?.id || eskiAyar.perakendeId || "", perakendeKod: perakende?.code || "", perakendeAd: perakende?.title || "Perakende Müşteri" });
 
     // --- Programda bekleyen (BizimHesap'ta henüz faturalaşmamış) satışlar
-    const [isler, satislar] = await Promise.all([allDocs("isemirleri"), allDocs("satislar")]);
-    const kayitlar = [...isler.map((x) => ({ col: "isemirleri", ...x })), ...satislar.map((x) => ({ col: "satislar", ...x }))]
-      .filter((x) => x.col === "satislar" ? !x.data.iptal : KAPALI.includes(x.data.durum));
+    const [isler, satislar, alislar] = await Promise.all([allDocs("isemirleri"), allDocs("satislar"), allDocs("alislar")]);
+    const kayitlar = [...isler.map((x) => ({ col: "isemirleri", ...x })), ...satislar.map((x) => ({ col: "satislar", ...x })), ...alislar.map((x) => ({ col: "alislar", ...x }))]
+      .filter((x) => x.col === "isemirleri" ? KAPALI.includes(x.data.durum) : !x.data.iptal);
     // Faturalaşma tespiti: taslak siparişler ekstrede görünmez; ekstrede program no'su geçiyorsa faturalaşmıştır
     const bekleyenFatura = kayitlar.filter((x) => x.data.bhAktarildi && x.data.bhGuid && !x.data.bhFaturali);
     const musteriGrup = new Map<string, Rec[]>();
     for (const x of bekleyenFatura) {
-      const cid = x.data.musteriId ? ((await getDoc("musteriler", x.data.musteriId))?.bhId || "") : (perakende?.id || "");
+      const cid = x.col === "alislar" ? (x.data.tedarikciId || "") : x.data.musteriId ? ((await getDoc("musteriler", x.data.musteriId))?.bhId || "") : (perakende?.id || "");
       if (!cid) continue;
       (musteriGrup.get(cid) || musteriGrup.set(cid, []).get(cid)!).push(x);
     }
@@ -77,7 +93,7 @@ Deno.serve(async (req) => {
         const satirlar = (ek.abstract || []).filter((a: Rec) => !/tahsilat|ödeme|devir/i.test(String(a.type || "") + " " + String(a.note || "")) || a.id);
         const faturali = (x: Rec) => satirlar.some((a: Rec) =>
           (a.id && String(a.id).toUpperCase() === String(x.data.bhGuid).toUpperCase()) ||
-          (!/tahsilat/i.test(String(a.type || "") + String(a.note || "")) && String(a.note || "").includes(x.data.no)));
+          (!/tahsilat|ödeme/i.test(String(a.type || "") + String(a.note || "")) && String(a.note || "").includes(x.data.no)));
         for (const x of xs) if (x.data.no && faturali(x)) {
           x.data.bhFaturali = true;
           await putDoc(x.col, x.id, x.data);
@@ -142,7 +158,7 @@ Deno.serve(async (req) => {
     await upsertMany(musYaz);
     await upsertMany(aracYaz);
 
-    const ozet = `${stokYaz.length} ürün, ${musYaz.length} müşteri güncellendi${aracYaz.length ? `, ${aracYaz.length} araç eklendi` : ""}`;
+    const ozet = `${stokYaz.length} ürün, ${musYaz.length} müşteri güncellendi${aracYaz.length ? `, ${aracYaz.length} araç eklendi` : ""}${tedYaz ? `, ${tedYaz} tedarikçi` : ""}`;
     await putDoc("ayarlar", "senkron", { son: Date.now(), durum: "tamam", not: ozet + (not.length ? " · " + not.join(" · ") : ""), urun: urunler.length, musteri: musBH.length });
     return json({ ok: true, ozet, not });
   } catch (e) {

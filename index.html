@@ -631,6 +631,21 @@ V.raporlar=()=>{
   const ar=[["bugun","Bugün"],["hafta","Bu hafta"],["ay","Bu ay"],["gecenay","Geçen ay"],["yil","Bu yıl"],["ozel","Tarih seç"]];
   const tekL=Object.entries(tek).sort((a,b)=>b[1].c-a[1].c), tekMax=Math.max(1,...tekL.map(t=>t[1].c));
   const tahL=Object.entries(tah), tahT=tahL.reduce((s,t)=>s+t[1],0);
+  // önceki dönem (aynı uzunluk)
+  const ob=b-(e-b), ciroF=(x,y)=>list("isemirleri").filter(r=>KAPALI.includes(r.durum)&&r.kapanis>=x&&r.kapanis<y).reduce((t,r)=>t+hesap(r.kalemler,r.indirim).genel,0)+list("satislar").filter(z=>!z.iptal&&z.tarih>=x&&z.tarih<y).reduce((t,z)=>t+hesap(z.kalemler,z.indirim).genel,0);
+  const ciro=sv.genel+pr.genel, onceki=ciroF(ob,b), degisim=onceki>0?(ciro-onceki)/onceki*100:null;
+  const fisSay=ie.length+sa.length, ortFis=fisSay?ciro/fisSay:0, marj=ciro>0?(sv.kar+pr.kar)/(ciro-sv.kdv-pr.kdv)*100:0;
+  // depo
+  const dep={}; for(const r of ie.concat(sa)){ const k=r.depo||"Belirtilmemiş"; const h=hesap(r.kalemler,r.indirim); dep[k]=dep[k]||{n:0,c:0,k:0}; dep[k].n++; dep[k].c+=h.genel; dep[k].k+=h.kar; }
+  const depL=Object.entries(dep).sort((x,y)=>y[1].c-x[1].c), depMax=Math.max(1,...depL.map(d=>d[1].c));
+  // müşteri
+  const mus={}; for(const r of ie.concat(sa)){ const k=r.musteriAd||"Perakende (isimsiz)"; mus[k]=mus[k]||{n:0,c:0}; mus[k].n++; mus[k].c+=hesap(r.kalemler,r.indirim).genel; }
+  const musL=Object.entries(mus).sort((x,y)=>y[1].c-x[1].c).slice(0,10);
+  // haftanın günü
+  const GUN=["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"], hg=GUN.map(g=>({g,c:0}));
+  for(const r of ie) hg[(new Date(r.kapanis).getDay()+6)%7].c+=hesap(r.kalemler,r.indirim).genel;
+  for(const z of sa) hg[(new Date(z.tarih).getDay()+6)%7].c+=hesap(z.kalemler,z.indirim).genel;
+  const hgMax=Math.max(1,...hg.map(x=>x.c));
   return `<div class="top"><h1>Raporlar</h1><button class="btn" data-act="csvRapor">Excel'e aktar (CSV)</button></div>
   <div class="toolbar"><div class="chips">${ar.map(([k,t])=>`<button class="chip ${R.aralik===k?"on":""}" data-act="aralik" data-v="${k}">${t}</button>`).join("")}</div>
   ${R.aralik==="ozel"?`<input type="date" id="r-bas" data-r="bas" value="${esc(R.bas)}" style="width:auto" aria-label="Başlangıç"><input type="date" id="r-bit" data-r="bit" value="${esc(R.bit)}" style="width:auto" aria-label="Bitiş">`:""}
@@ -642,10 +657,16 @@ V.raporlar=()=>{
     <div class="tile"><div class="k">İşçilik geliri</div><div class="v">${TL(sv.iscilik)}</div></div>
     <div class="tile"><div class="k">Brüt kâr (KDV hariç)</div><div class="v">${TL(sv.kar+pr.kar)}</div></div>
     <div class="tile"><div class="k">Hesaplanan KDV</div><div class="v">${TL(sv.kdv+pr.kdv)}</div></div>
+    <div class="tile"><div class="k">Önceki döneme göre</div><div class="v" style="color:${degisim==null?"inherit":degisim>=0?"var(--ok,#1f7a3a)":"var(--bad,#b3261e)"}">${degisim==null?"–":(degisim>=0?"+":"")+degisim.toFixed(1).replace(".",",")+"%"}</div><div class="muted" style="font-size:12px">Önceki: ${TL(onceki)}</div></div>
+    <div class="tile"><div class="k">Ortalama fiş</div><div class="v">${TL(ortFis)}</div><div class="muted" style="font-size:12px">${fisSay} fiş</div></div>
+    <div class="tile"><div class="k">Kâr marjı</div><div class="v">${ciro>0?marj.toFixed(1).replace(".",",")+"%":"–"}</div><div class="muted" style="font-size:12px">KDV hariç satışa göre</div></div>
   </div>
   <div class="card" style="margin-bottom:16px"><h2>Günlük ciro <span class="legend"><span><i style="background:var(--accent)"></i>Servis</span><span><i style="background:var(--info)"></i>Perakende</span></span></h2>${grafik(gunler)}</div>
   <div class="grid2">
     <div class="card"><h2>Tahsilat dağılımı <span class="sub">${TL(tahT)}</span></h2>${tahL.length?tahL.map(([k,v])=>`<div class="bar-row"><span>${esc(k)}</span><div class="bar-bg"><div class="bar" style="width:${(v/Math.max(1,tahT)*100).toFixed(1)}%"></div></div><span class="right">${TL(v)}</span></div>`).join(""):`<div class="empty">Bu aralıkta tahsilat yok.</div>`}<p class="muted" style="font-size:13px;margin:8px 0 0">Veresiye satışlar tahsilat sayılmaz; müşteri carisine borç yazılır.</p></div>
+    <div class="card"><h2>Depo bazında satış</h2>${depL.length?depL.map(([k,v])=>`<div class="bar-row"><span>${esc(k)} <span class="muted">(${v.n})</span></span><div class="bar-bg"><div class="bar" style="width:${(v.c/depMax*100).toFixed(1)}%"></div></div><span class="right">${TL(v.c)}</span></div>`).join(""):`<div class="empty">Bu aralıkta satış yok.</div>`}</div>
+    <div class="card"><h2>Haftanın günlerine göre ciro</h2>${fisSay?hg.map(x=>`<div class="bar-row"><span>${x.g}</span><div class="bar-bg"><div class="bar" style="width:${(x.c/hgMax*100).toFixed(1)}%"></div></div><span class="right">${TL(x.c)}</span></div>`).join(""):`<div class="empty">Bu aralıkta satış yok.</div>`}</div>
+    <div class="card"><h2>En çok alışveriş yapan müşteriler</h2>${musL.length?`<div class="tw"><table><thead><tr><th>Müşteri</th><th class="n">Fiş</th><th class="n">Tutar</th></tr></thead><tbody>${musL.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${v.n}</td><td class="n">${TL(v.c)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Kayıt yok.</div>`}</div>
     <div class="card"><h2>Teknisyen performansı</h2>${tekL.length?tekL.map(([k,v])=>`<div class="bar-row"><span>${esc(k)} <span class="muted">(${v.n})</span></span><div class="bar-bg"><div class="bar" style="width:${(v.c/tekMax*100).toFixed(1)}%"></div></div><span class="right">${TL(v.c)}</span></div>`).join(""):`<div class="empty">Bu aralıkta tamamlanan iş yok.</div>`}</div>
     <div class="card"><h2>En çok satan parçalar</h2>${parL.length?`<div class="tw"><table><thead><tr><th>Kod</th><th>Parça</th><th class="n">Adet</th><th class="n">Tutar</th></tr></thead><tbody>${parL.map(p=>`<tr><td>${esc(p.kod)}</td><td>${esc(p.ad)}</td><td class="n">${NF.format(p.adet).replace(/,00$/,"")}</td><td class="n">${TL(p.tutar)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Kayıt yok.</div>`}</div>
     <div class="card"><h2>İşçilik kalemleri</h2>${iscL.length?`<div class="tw"><table><thead><tr><th>İşçilik</th><th class="n">Adet</th><th class="n">Tutar</th></tr></thead><tbody>${iscL.map(p=>`<tr><td>${esc(p.ad)}</td><td class="n">${NF.format(p.adet).replace(/,00$/,"")}</td><td class="n">${TL(p.tutar)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Kayıt yok.</div>`}

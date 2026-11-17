@@ -496,6 +496,8 @@ V.panel=()=>{
   <div class="grid2">
     <div class="card"><h2>Teslime hazır <span class="sub">${hazir.length} araç</span></h2><div class="list">${hazir.map(isRow).join("")||`<div class="empty">Teslim bekleyen araç yok.</div>`}</div></div>
     <div class="card"><h2>Geciken ve bekleyen <span class="sub">3 gün ve üzeri ya da teslim tarihi geçmiş</span></h2><div class="list">${gec.map(isRow).join("")||`<div class="empty">Geciken iş yok.</div>`}</div></div>
+    ${(()=>{ const B=bekleyenSiparisler(), bg0=gunBasi(Date.now()); return `<div class="card"><h2>Bekleyen parçalar <span class="sub">${B.length} sipariş</span></h2><div class="list">${B.slice(0,15).map(({r,x,i})=>{ const gec=x.beklenen&&x.beklenen<bg0, bugun=x.beklenen&&x.beklenen>=bg0&&x.beklenen<bg0+86400000;
+      return `<div class="row" tabindex="0" data-act="isAc" data-id="${esc(r.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(r.plaka))}</span></div><div class="main"><div class="t1">${esc(x.ad||"Parça")}</div><div class="t2">${esc(x.tedarikci||"Tedarikçi yok")} · <span class="${gec?"late":""}">${x.beklenen?(bugun?"bugün bekleniyor":gec?"gecikti, "+tarih(x.beklenen):tarih(x.beklenen)):"tarih yok"}</span></div></div><div class="end"><button class="btn sm" data-act="siparisGeldi" data-id="${esc(r.id)}" data-i="${i}">Geldi</button></div></div>`;}).join("")||`<div class="empty">Bekleyen parça siparişi yok.</div>`}</div></div>`; })()}
     <div class="card"><h2>Dış serviste <span class="sub">${dis.length} araç</span></h2><div class="list">${dis.map(r=>`<div class="row" tabindex="0" data-act="isAc" data-id="${esc(r.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(r.plaka))}</span></div><div class="main"><div class="t1">${esc((r.dis&&r.dis.firma)||"Firma girilmemiş")}</div><div class="t2">Gönderim ${tarih(r.dis&&r.dis.gonderim)||"-"} · Dönüş ${tarih(r.dis&&r.dis.donus)||"-"}</div></div><div class="end">${pill(r.durum)}</div></div>`).join("")||`<div class="empty">Dış serviste araç yok.</div>`}</div></div>
     <div class="card"><h2>Periyodik bakım <span class="sub">30 gün içinde</span></h2><div class="list">${bakim.map(a=>{const m=S.musteriler[a.musteriId]||{}; const gecti=a.sonrakiBakimTarih<now;
       return `<div class="row" tabindex="0" data-act="aracAc" data-id="${esc(a.id)}"><div class="lead"><span class="plaka">${esc(plakaFmt(a.plaka))}</span></div><div class="main"><div class="t1">${esc(m.ad||"-")}</div><div class="t2 ${gecti?"late":""}">${tarih(a.sonrakiBakimTarih)}${a.sonrakiBakimKm?" · "+esc(a.sonrakiBakimKm)+" km":""}</div></div><div class="end">${waLink(m.tel,sablonDoldur(S.ayarlar.bakimSablon,{musteri:m.ad,plaka:plakaFmt(a.plaka),tarih:tarih(a.sonrakiBakimTarih)}),"Hatırlat")}</div></div>`;}).join("")||`<div class="empty">Yaklaşan bakım yok.</div>`}</div></div>
@@ -1081,6 +1083,7 @@ function isFormHTML(){
       <div class="tot" id="f-tot">${totHTML(h)}</div>
     </div>
   </div>
+  ${siparisHTML()}
   ${teklifHTML()}
   </div>
   <div class="sekme" data-sekme="tahsilat"${UI.isSekme==="tahsilat"?"":' style="display:none"'}>
@@ -1105,6 +1108,30 @@ function isFormHTML(){
     ${f.id?`<button class="btn" data-act="fisIndir">Fiş / teslim formu yazdır</button><button class="btn" data-act="etiketIndir">Barkod etiketi yazdır</button><span id="f-wa">${waLink(f.musteriTel,sablonDoldur(S.ayarlar.sablon,{musteri:f.musteriAd,plaka:plakaFmt(f.plaka),durum:f.durum,tutar:TL(h.genel),no:f.no}),"WhatsApp ile bildir")}</span><button class="btn danger yon-only" data-act="isSil">Sil</button>`:""}
   </div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="isKaydet">Kaydet</button></div>`;
 }
+/* ---------- parça siparişleri ---------- */
+const TEDARIKCI_VAR=["Otomarmara","Kaymazlar","Neko","Martaş","Başbuğ","Özaş"];
+function tedarikciler(){ const s=new Set(TEDARIKCI_VAR); for(const r of list("isemirleri")) for(const x of r.siparisler||[]) if(x.tedarikci) s.add(x.tedarikci); return [...s].sort((a,b)=>a.localeCompare(b,"tr")); }
+function bekleyenSiparisler(){ const o=[]; for(const r of list("isemirleri")) if(!["İptal","Teslim Edildi"].includes(r.durum)) (r.siparisler||[]).forEach((x,i)=>{ if(x.durum!=="Geldi") o.push({r,x,i}); }); return o.sort((a,b)=>(a.x.beklenen||9e15)-(b.x.beklenen||9e15)); }
+function siparisHTML(){
+  const L=F.siparisler||[], bek=L.filter(x=>x.durum!=="Geldi").length;
+  return `<div class="sec" id="f-siparis"><h3>Parça siparişleri ${L.length?`<span class="muted" style="font:500 14px var(--body)">${bek?bek+" bekleniyor":"hepsi geldi"}</span>`:""} <span class="toolbar" style="margin:0"><button class="btn sm" data-act="siparisEkle">Sipariş ekle</button></span></h3>
+    ${F.kalemler.some(k=>k.tip==="parca"&&!L.some(x=>x.ad===k.ad))?`<div class="hizli">${F.kalemler.filter(k=>k.tip==="parca"&&!L.some(x=>x.ad===k.ad)).slice(0,8).map(k=>`<button class="chip" data-act="siparisKalem" data-v="${esc(k.ad)}">+ ${esc(String(k.ad).slice(0,40))} sipariş et</button>`).join("")}</div>`:""}
+    ${L.length?`<div class="tw"><table><thead><tr><th>Parça</th><th>Tedarikçi</th><th>Beklenen</th><th>Durum</th><th></th></tr></thead><tbody>${L.map((x,i)=>{ const gec=x.durum!=="Geldi"&&x.beklenen&&x.beklenen<gunBasi(Date.now()); return `<tr>
+      <td><input id="sp-ad-${i}" data-sp="${i}.ad" value="${esc(x.ad||"")}" aria-label="Parça"></td>
+      <td><input id="sp-ted-${i}" data-sp="${i}.tedarikci" list="dl-ted" value="${esc(x.tedarikci||"")}" aria-label="Tedarikçi" style="min-width:110px"></td>
+      <td><input id="sp-bek-${i}" type="date" data-sp="${i}.beklenen" value="${dInput(x.beklenen)}" aria-label="Beklenen tarih" class="${gec?"late":""}"></td>
+      <td>${x.durum==="Geldi"?`<span class="pill p-Tamamlandı">Geldi ${tarih(x.gelis)}</span>`:`<button class="btn sm" data-act="siparisGeldiForm" data-i="${i}">Geldi</button>${gec?` <span class="late" style="font-size:12px">gecikti</span>`:""}`}</td>
+      <td class="right"><button class="btn sm danger" data-act="siparisSil" data-i="${i}" aria-label="Siparişi sil">×</button></td></tr>`;}).join("")}</tbody></table></div>
+    <datalist id="dl-ted">${tedarikciler().map(t=>`<option value="${esc(t)}">`).join("")}</datalist>`:`<p class="muted" style="font-size:13px;margin:0">Stokta olmayan parçayı tedarikçiden istediyseniz buraya ekleyin; iş "Parça Bekleniyor" olur, parça gelince size hatırlatılır.</p>`}
+  </div>`;
+}
+
+function siparisYeni(ad){
+  F.siparisler=F.siparisler||[]; F.siparisler.push({id:uid(),ad,tedarikci:"",tarih:Date.now(),beklenen:gunBasi(Date.now())+86400000,durum:"Bekleniyor",not:""});
+  if(!KAPALI.includes(F.durum)&&!["Parça Bekleniyor","Dış Serviste","İptal"].includes(F.durum)){ F.durum="Parça Bekleniyor"; toast("Durum \"Parça Bekleniyor\" yapıldı. Kaydetmeyi unutmayın."); }
+  modalCiz(); const el=document.getElementById(ad?"sp-ted-"+(F.siparisler.length-1):"sp-ad-"+(F.siparisler.length-1)); if(el) el.focus();
+}
+
 /* ---------- müşteri teklif/onay ---------- */
 const sayiN=v=>{ const n=typeof v==="number"?v:Number(String(v==null?"":v).replace(",",".")); return isFinite(n)?n:0; };
 function teklifOzet(r){
@@ -1355,6 +1382,16 @@ const ACT={
   isYeniArac:()=>{ const a=S.araclar[F.id]; isYeni(a); },
   durumF:d=>{UI.durum=d.v;render();},
   bhAralik:d=>{UI.bhAralik=d.v;render();},
+  siparisEkle:()=>{ siparisYeni(""); },
+  siparisKalem:d=>{ siparisYeni(d.v); },
+  siparisSil:d=>{ F.siparisler.splice(+d.i,1); modalCiz(); },
+  siparisGeldiForm:d=>{ const x=F.siparisler[+d.i]; x.durum="Geldi"; x.gelis=Date.now(); const kalan=F.siparisler.filter(y=>y.durum!=="Geldi").length;
+    if(!kalan&&F.durum==="Parça Bekleniyor"){ F.durum="İşlemde"; toast("Tüm parçalar geldi; durum İşlemde yapıldı. Kaydetmeyi unutmayın."); } modalCiz(); },
+  siparisGeldi:async d=>{ const r=S.isemirleri[d.id]; if(!r) return; const f=JSON.parse(JSON.stringify(r)); f.dis=f.dis||{}; f.kalemler=f.kalemler||[]; f.tahsilatlar=f.tahsilatlar||[];
+    const x=(f.siparisler||[])[+d.i]; if(!x) return; x.durum="Geldi"; x.gelis=Date.now();
+    const kalan=f.siparisler.filter(y=>y.durum!=="Geldi").length;
+    if(!kalan&&f.durum==="Parça Bekleniyor") f.durum="İşlemde";
+    try{ await isKaydetVeri(f,true); toast(`${plakaFmt(f.plaka)}: ${x.ad||"parça"} geldi${!kalan?" · tüm parçalar tamam, iş İşlemde":""}`); render(); }catch(e){ toast(hataMesaj(e)); } },
   teklifOlustur:async(d,el)=>{ const f=F; if(!plakaKey(f.plaka)){ toast("Önce plakayı girin"); isSekmeSec("arac"); return; }
     if(!f.kalemler.length){ toast("Önce parça ya da işçilik ekleyin"); return; }
     if(!f.teklifToken){ const a=new Uint8Array(24); crypto.getRandomValues(a); f.teklifToken=Array.from(a,b=>"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"[b%57]).join(""); }
@@ -1536,6 +1573,7 @@ document.addEventListener("input",e=>{
     if(d.f==="indirim") isToplamYenile();
     if(d.f==="musteriTel"||d.f==="durum"){ const w=$("#f-wa"); if(w) w.innerHTML=waLink(F.musteriTel,sablonDoldur(S.ayarlar.sablon,{musteri:F.musteriAd,plaka:plakaFmt(F.plaka),durum:F.durum,tutar:TL(hesap(F.kalemler,F.indirim).genel),no:F.no}),"WhatsApp ile bildir"); }
     return; }
+  if(d.sp!==undefined&&F){ const [i,k]=d.sp.split("."); if(F.siparisler&&F.siparisler[+i]) F.siparisler[+i][k]=t.type==="date"?fromInput(t.value):t.value; return; }
   if(d.k!==undefined&&F){ const [i,k]=d.k.split("."); F.kalemler[+i][k]=t.value; isToplamYenile(); return; }
   if(d.ks!==undefined){ const res=stokAra(t.value,8), dd=$("#f-dd");
     dd.innerHTML=res.length?`<div class="dd">${res.map(s=>`<div data-act="kalemEkle" data-id="${esc(s.id)}"><b>${esc(s.kod||"")}</b> ${esc(s.ad)} <small>${s.tur==="hizmet"?"İşçilik":esc(F.depo)+": "+NF.format(num((s.miktar||{})[F.depo])).replace(/,00$/,"")} · ${TL(s.satis)}</small></div>`).join("")}</div>`:""; return; }

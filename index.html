@@ -235,7 +235,7 @@ const COLS=["musteriler","araclar","isemirleri","stok","satislar","giderler","ka
 const NAV=[["panel","Panel"],["isemirleri","İş Emirleri"],["randevu","Randevu"],["satis","Hızlı Satış"],["bhhareket","BizimHesap"],["kasa","Kasa"],["giderler","Giderler"],["araclar","Araçlar"],["musteriler","Müşteriler"],["stok","Stok"],["raporlar","Raporlar"],["ayarlar","Ayarlar"]];
 
 /* ---------- durum ---------- */
-const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},randevular:{},bhhareket:{},ayarlar:Object.assign({},DEF_AYAR)};
+const S={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},randevular:{},bhhareket:{},maliyet:{},ayarlar:Object.assign({},DEF_AYAR)};
 let db=null, dl=null, mod="yukleniyor", yuklemeHata="", yuklenen=new Set();
 let view=hashView();
 const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:"",bhhareket:""},bhAralik:"bugun",bhTip:"Tümü",kasaGun:"",kasaDepo:"Tümü",kasaSayim:"",kasaAcilis:"",kasaNot:"",giderAralik:"ay",giderKat:"Tümü",randevuGun:"",durum:"Açık",stokF:"Tümü",
@@ -396,7 +396,7 @@ async function verileriYukle(){
     if(re) throw re;
     ROL=rl||"yok"; KULLANICI={eposta:(ud&&ud.user&&ud.user.email)||"",ad:"",rol:ROL};
     if(ROL==="yok"){ mod="giris"; $("#gbar").style.display="none"; $("#nav").innerHTML=""; $("#main").innerHTML=`<div class="card" style="max-width:420px;margin:40px auto"><h2>Yetki verilmemiş</h2><p>${esc(KULLANICI.eposta)} hesabına bu programda yetki tanımlanmamış. Yöneticinizden sizi Ayarlar → Kullanıcılar bölümünden eklemesini isteyin.</p><button class="btn" data-act="cikis">Çıkış yap</button></div>`; return; }
-    const o={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},randevular:{},bhhareket:{},ayarlar:{}};
+    const o={musteriler:{},araclar:{},isemirleri:{},stok:{},satislar:{},giderler:{},kasakapanis:{},randevular:{},bhhareket:{},maliyet:{},ayarlar:{}};
     for(let from=0;;from+=1000){
       const {data,error}=await sb.from("docs").select("col,id,data").order("col").order("id").range(from,from+999);
       if(error) throw error;
@@ -404,7 +404,7 @@ async function verileriYukle(){
       if(data.length<1000) break;
     }
     for(const c of COLS) S[c]=o[c];
-    S.bhhareket=o.bhhareket;
+    S.bhhareket=o.bhhareket; S.maliyet=o.maliyet; maliyetUygulaHepsi();
     AY=o.ayarlar; S.ayarlar=Object.assign({},DEF_AYAR,AY.genel||{}); SENK=AY.senkron||null;
     const ben=((AY.kullanicilar||{}).liste||[]).find(k=>String(k.eposta).toLowerCase()===String(KULLANICI.eposta).toLowerCase()); if(ben) KULLANICI.ad=ben.ad;
     if(!izin(view)){ view="panel"; history.replaceState(null,"","#panel"); }
@@ -416,7 +416,8 @@ async function verileriYukle(){
     else if(r.col==="ayarlar"){ AY[r.id]=r.data; if(r.id==="genel") S.ayarlar=Object.assign({},DEF_AYAR,r.data); if(r.id==="senkron") SENK=r.data; if(r.id==="kullanicilar") sb.rpc("akcan_rol").then(({data})=>{ if(data&&data!==ROL){ ROL=data; if(ROL==="yok") location.reload(); if(!izin(view)) location.hash="#panel"; renderSoon(); } }); }
     else if(S[r.col]){
       if(r.col==="isemirleri"&&r.data&&r.data.onay){ const es=S.isemirleri[r.id]; if(!es||!es.onay||es.onay.zaman!==r.data.onay.zaman){ toast(`${plakaFmt(r.data.plaka)}: müşteri teklifi ${r.data.onay.durum==="red"?"ONAYLAMADI":"onayladı"}${r.data.onay.not?" · "+r.data.onay.not:""}`); if(F&&F.id===r.id){ F.onay=r.data.onay; F.onayGecmis=r.data.onayGecmis; } } }
-      S[r.col][r.id]=r.data; }
+      if(r.col==="maliyet"){ S.maliyet[r.id]=r.data; maliyetSoon(); }
+      else { if(["stok","isemirleri","satislar"].includes(r.col)) maliyetUygula(r.col,r.data); S[r.col][r.id]=r.data; } }
     renderSoon();
   }).subscribe();
 }
@@ -1113,6 +1114,19 @@ function isFormHTML(){
     ${f.id?`<button class="btn" data-act="fisIndir">Fiş / teslim formu yazdır</button><button class="btn" data-act="etiketIndir">Barkod etiketi yazdır</button><span id="f-wa">${waLink(f.musteriTel,sablonDoldur(S.ayarlar.sablon,{musteri:f.musteriAd,plaka:plakaFmt(f.plaka),durum:f.durum,tutar:TL(h.genel),no:f.no}),"WhatsApp ile bildir")}</span><button class="btn danger yon-only" data-act="isSil">Sil</button>`:""}
   </div><button class="btn" data-act="kapat">Vazgeç</button><button class="btn pri" data-act="isKaydet">Kaydet</button></div>`;
 }
+/* ---------- Alış fiyatları (yalnızca yönetici okuyabilir) ---------- */
+function maliyetUygula(col,d){
+  if(!d) return d; const M2=S.maliyet;
+  if(col==="stok"){ const m=M2[d.id]; if(m&&m.alis!=null) d.alis=num(m.alis); return d; }
+  const fis=M2["fis:"+col+":"+d.id];
+  for(const k of d.kalemler||[]){ if(!k.stokId) continue;
+    if(fis&&fis.alis&&fis.alis[k.stokId]!=null) k.alis=num(fis.alis[k.stokId]);
+    else if(M2[k.stokId]&&M2[k.stokId].alis!=null) k.alis=num(M2[k.stokId].alis); }
+  return d;
+}
+function maliyetUygulaHepsi(){ if(!Object.keys(S.maliyet||{}).length) return; for(const c of ["stok","isemirleri","satislar"]) for(const d of Object.values(S[c])) maliyetUygula(c,d); }
+let _malT=null; const maliyetSoon=()=>{ clearTimeout(_malT); _malT=setTimeout(()=>{ maliyetUygulaHepsi(); renderSoon(); },400); };
+
 /* ---------- Randevu ---------- */
 const RDURUM={"Bekleniyor":"p-İşlemde","Geldi":"p-Tamamlandı","Gelmedi":"p-İptal","İptal":"p-Teslim"};
 const saat=ms=>new Date(ms).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});

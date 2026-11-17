@@ -92,6 +92,8 @@ Deno.serve(async (req) => {
 
     // --- Stok farkı
     const mevcutStok = new Map((await allDocs("stok")).map((r) => [r.id, r.data]));
+    // Alış fiyatı yalnızca yöneticinin okuyabildiği maliyet kayıtlarında tutulur; karşılaştırma için geri birleştir
+    for (const m of await allDocs("maliyet")) if (!String(m.id).startsWith("fis:") && mevcutStok.has(m.id)) mevcutStok.get(m.id).alis = m.data.alis;
     const stokYaz: { col: string; id: string; data: Rec }[] = [];
     const ALAN = ["kod", "ad", "barkod", "oem", "marka", "kategori", "alis", "satis", "kdv", "birim", "miktar", "aktif", "kaynak", "bhId", "tur"];
     for (const u of urunler) {

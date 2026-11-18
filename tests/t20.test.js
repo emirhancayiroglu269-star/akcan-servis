@@ -15,6 +15,8 @@ setTimeout(()=>{ const T=w.__test,S=T.S; const D=86400000; const g=new Date(); g
  setTimeout(()=>{ console.log('hatirlatildi', !!S.randevular.r2.hatirlatildi);
   d.querySelector('[data-act="randevuOnayla"][data-id="r1"]').click();
   setTimeout(()=>{ console.log('onay', S.randevular.r1.durum, opened.length, decodeURIComponent(opened[0]||'').slice(0,120));
+   // Takvimde geçmiş saatlere "+" düğmesi çıkmaz; test akşam çalışırsa yarına geç (saatten bağımsız olsun)
+   if(!d.querySelector('.rtak-ekle')){ const gi=d.querySelector('input[data-u="randevuGun"]'), y=new Date(b+D+3600000); gi.value=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0'); gi.dispatchEvent(new w.Event('change',{bubbles:true})); }
    d.querySelector('.rtak-ekle').click();
    setTimeout(()=>{ console.log('modal yeni', !!d.querySelector('#r-tarih'), d.querySelector('#r-tarih').value, d.querySelector('#r-depo').value);
     w.location.hash='#ayarlar'; setTimeout(()=>{ console.log('ayar', txt().includes('Online randevu'), !!d.querySelector('[data-a="randevuSlot"]'));

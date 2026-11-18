@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Online randevu</title>
+<style>
+:root{--ink:#16181b;--muted:#636a73;--line:#e3e0da;--bg:#f4f2ee;--card:#fff;--accent:#cf4510;--accent-soft:#fbe9df;--ok:#1f7a3a;--ok-soft:#e3f2e7;--bad:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.w{max-width:640px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+h1{font-size:20px;margin:0}
+h2{font-size:16px;margin:0 0 10px}
+.muted{color:var(--muted);font-size:14px}
+a{color:var(--accent)}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{flex:1;min-width:120px}
+.gunler{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory}
+.gun{flex:0 0 72px;scroll-snap-align:start;text-align:center;padding:8px 4px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;font:inherit}
+.gun b{display:block;font-size:20px;line-height:1.2}
+.gun small{display:block;color:var(--muted);font-size:12px}
+.gun:disabled{opacity:.35;cursor:not-allowed}
+.saatler{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.saat{padding:10px 0;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit;font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums}
+.saat:disabled{opacity:.35;text-decoration:line-through;cursor:not-allowed;font-weight:400}
+.sec{border:2px solid var(--accent)!important;background:var(--accent-soft)!important}
+.opt{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit;cursor:pointer}
+label{display:block;font-size:14px;color:var(--muted);margin-top:10px}
+input,textarea,select{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;margin-top:4px;background:#fff;color:var(--ink)}
+textarea{min-height:64px}
+.gonder{width:100%;margin-top:14px;font:inherit;font-weight:800;border:0;border-radius:10px;padding:14px;background:var(--accent);color:#fff;cursor:pointer}
+.gonder:disabled{opacity:.6}
+.ozet{background:var(--accent-soft);border-radius:10px;padding:10px 12px;margin-top:12px;font-weight:600}
+.tamam{background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:16px;font-weight:600}
+.hata{color:var(--bad);font-size:14px;margin-top:8px}
+.gizli{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="w" id="app"><div class="card">Randevu takvimi yükleniyor…</div></div>
+<script>
+(function(){
+  const FN="https://amtgrdyongsmkrfdmhgq.supabase.co/functions/v1/randevu", KEY="sb_publishable_o0c4V1Y-ElYjZcnHAX9Taw_DLy-0UNP";
+  const app=document.getElementById("app");
+  const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const GA=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
+  const gunAd=g=>{ const d=new Date(g+"T12:00:00"); return {kisa:GA[d.getDay()],no:d.getDate(),ay:d.toLocaleDateString("tr-TR",{month:"short"}),uzun:d.toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"})}; };
+  const q=new URLSearchParams(location.search);
+  let V=null, S={depo:q.get("sube")||"",gun:"",saat:"",is:"",ad:"",tel:"",plaka:"",not:""}, HATA="";
+
+  async function yukle(depo){
+    const r=await fetch(FN+(depo?"?depo="+encodeURIComponent(depo):""),{headers:{apikey:KEY}});
+    const j=await r.json(); if(!r.ok||j.hata){ const e=new Error(j.hata||"Takvim açılamadı."); e.firma=j.firma; throw e; }
+    V=j; S.depo=j.depo;
+    const g=j.gunler.find(x=>x.gun===S.gun);
+    if(!g||!g.slotlar.some(s=>s.bos)){ const ilk=j.gunler.find(x=>x.slotlar.some(s=>s.bos)); S.gun=ilk?ilk.gun:""; S.saat=""; }
+    else if(S.saat&&!g.slotlar.some(s=>s.saat===S.saat&&s.bos)) S.saat="";
+  }
+  function oku(){ for(const k of ["ad","tel","plaka","not"]){ const el=document.getElementById("f-"+k); if(el) S[k]=el.value; } }
+  function ciz(){
+    const f=V.firma, g=V.gunler.find(x=>x.gun===S.gun);
+    app.innerHTML=`
+    <div class="card"><h1>${esc(f.ad||"Online randevu")}</h1><div class="muted">${esc(f.adres||"")}${f.tel?` · <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:""}</div></div>
+    ${V.depolar.length>1?`<div class="card"><h2>1. Şube</h2><div class="seg">${V.depolar.map(d=>`<button class="opt ${d===S.depo?"sec":""}" data-depo="${esc(d)}">${esc(d)}</button>`).join("")}</div></div>`:""}
+    <div class="card"><h2>${V.depolar.length>1?"2":"1"}. Gün</h2>
+      <div class="gunler">${V.gunler.map(x=>{ const a=gunAd(x.gun), bos=x.slotlar.filter(s=>s.bos).length; return `<button class="gun ${x.gun===S.gun?"sec":""}" data-gun="${x.gun}" ${bos?"":"disabled"}><small>${a.kisa}</small><b>${a.no}</b><small>${x.kapali?"kapalı":bos?a.ay:"dolu"}</small></button>`; }).join("")}</div>
+    </div>
+    <div class="card"><h2>${V.depolar.length>1?"3":"2"}. Saat</h2>
+      ${g?`<div class="muted" style="margin-bottom:8px">${esc(gunAd(g.gun).uzun)}</div><div class="saatler">${g.slotlar.map(s=>`<button class="saat ${s.saat===S.saat?"sec":""}" data-saat="${s.saat}" ${s.bos?"":"disabled"}>${s.saat}</button>`).join("")}</div>`:`<p class="muted">Önümüzdeki günlerde boş saat yok. Lütfen bizi arayın.</p>`}
+    </div>
+    <div class="card"><h2>${V.depolar.length>1?"4":"3"}. Bilgileriniz</h2>
+      <label>Yapılacak iş<select id="f-is">${["",...V.hizmetler].map(h=>`<option value="${esc(h)}"${h===S.is?" selected":""}>${h?esc(h):"Seçin"}</option>`).join("")}</select></label>
+      <label>Adınız soyadınız<input id="f-ad" autocomplete="name" value="${esc(S.ad)}"></label>
+      <label>Cep telefonu<input id="f-tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="05xx xxx xx xx" value="${esc(S.tel)}"></label>
+      <label>Plaka (isteğe bağlı)<input id="f-plaka" autocapitalize="characters" placeholder="34 ABC 123" value="${esc(S.plaka)}"></label>
+      <label>Not (isteğe bağlı)<textarea id="f-not" placeholder="Aracın markası, şikayetiniz…">${esc(S.not)}</textarea></label>
+      <div class="gizli" aria-hidden="true"><label>Web sitesi<input id="f-web" tabindex="-1" autocomplete="off"></label></div>
+      ${S.gun&&S.saat?`<div class="ozet">${esc(S.depo)} · ${esc(gunAd(S.gun).uzun)} · saat ${esc(S.saat)}</div>`:""}
+      ${HATA?`<div class="hata">${esc(HATA)}</div>`:""}
+      <button class="gonder" id="gonder" ${S.gun&&S.saat?"":"disabled"}>${S.gun&&S.saat?"Randevu talebini gönder":"Önce gün ve saat seçin"}</button>
+      <p class="muted" style="margin:10px 0 0">Talebiniz servisimize iletilir; randevunuz onaylandığında size WhatsApp ya da telefonla dönüş yapılır.</p>
+    </div>`;
+    app.querySelectorAll("[data-depo]").forEach(b=>b.onclick=async()=>{ oku(); b.disabled=true; try{ await yukle(b.dataset.depo); HATA=""; }catch(e){ HATA=e.message; } ciz(); });
+    app.querySelectorAll("[data-gun]").forEach(b=>b.onclick=()=>{ oku(); S.gun=b.dataset.gun; S.saat=""; HATA=""; ciz(); });
+    app.querySelectorAll("[data-saat]").forEach(b=>b.onclick=()=>{ oku(); S.saat=b.dataset.saat; HATA=""; ciz(); const o=document.getElementById("f-is"); if(o&&o.scrollIntoView) o.scrollIntoView({behavior:"smooth",block:"center"}); });
+    const is=document.getElementById("f-is"); if(is) is.onchange=()=>{ S.is=is.value; };
+    const gb=document.getElementById("gonder"); if(gb) gb.onclick=gonder;
+  }
+  async function gonder(){
+    oku(); S.is=document.getElementById("f-is").value;
+    const gb=document.getElementById("gonder"); gb.disabled=true; gb.textContent="Gönderiliyor…";
+    try{
+      const r=await fetch(FN,{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify({depo:S.depo,gun:S.gun,saat:S.saat,is:S.is,ad:S.ad,tel:S.tel,plaka:S.plaka,not:S.not,web:document.getElementById("f-web").value})});
+      const j=await r.json();
+      if(!r.ok||j.hata){ HATA=j.hata||"Gönderilemedi."; if(j.dolu){ await yukle(S.depo); } ciz(); return; }
+      const f=V.firma;
+      app.innerHTML=`<div class="card"><h1>${esc(f.ad||"")}</h1></div><div class="card"><div class="tamam">Talebiniz alındı.<br>${esc(S.depo)} · ${esc(gunAd(S.gun).uzun)} · saat ${esc(S.saat)}</div>
+        <p>Randevunuz servisimiz tarafından onaylandığında size dönüş yapılacak.${f.tel?` Değişiklik için: <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:""}</p></div>`;
+    }catch(e){ HATA="Bağlantı sorunu, lütfen tekrar deneyin."; ciz(); }
+  }
+  yukle(S.depo).then(ciz).catch(e=>{ const f=e.firma||{}; app.innerHTML=`<div class="card"><h1>${esc(f.ad||"Online randevu")}</h1><p class="muted">${esc(e.message)}</p>${f.tel?`<p><a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a></p>`:""}</div>`; });
+})();
+</script>
+</body>
+</html>

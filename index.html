@@ -241,7 +241,7 @@ let view=hashView();
 const UI={q:{isemirleri:"",araclar:"",musteriler:"",stok:"",satis:"",bhhareket:""},bhAralik:"bugun",bhTip:"Tümü",kasaGun:"",kasaDepo:"Tümü",kasaSayim:"",kasaAcilis:"",kasaNot:"",giderAralik:"ay",giderKat:"Tümü",alisSekme:"fatura",alisAralik:"ay",randevuGun:"",durum:"Açık",stokF:"Tümü",
   rapor:{aralik:"ay",bas:"",bit:""},sepet:[],satisDepo:"",satisMusteri:"",satisYontem:"Nakit",satisIndirim:0,satisKasa:"",satisKasaYon:"",isGorunum:"liste",isSekme:"arac"};
 let F=null, M=null; // açık form ve modal türü
-let IMPORT=null, SENK=null;
+let IMPORT=null, SENK=null, YEDEKLER=null;
 let ROL="yonetici", KULLANICI={eposta:"",ad:"",rol:"yonetici"};
 const ROL_AD={yonetici:"Yönetici",usta:"Usta",kasiyer:"Kasiyer"};
 const ROL_GORUNUM={usta:["panel","isemirleri","randevu","araclar","musteriler","stok"],kasiyer:["panel","isemirleri","randevu","satis","araclar","musteriler","stok","kasa"]};
@@ -944,7 +944,10 @@ V.ayarlar=()=>{const A=S.ayarlar;
   ${bhAyarHTML()}
   <div class="card" style="margin-top:16px"><h2>Yedekleme</h2>
     <p class="muted" style="margin-top:0">Tüm kayıtları tek dosya olarak indirin, gerektiğinde geri yükleyin. Geri yükleme aynı numaralı kayıtların üzerine yazar.</p>
-    <div class="toolbar"><button class="btn" data-act="yedekAl">Yedek indir</button><label class="btn" for="yedek-dosya">Yedekten geri yükle / BizimHesap aktarımı</label><input type="file" id="yedek-dosya" accept=".json,application/json" style="display:none"></div>
+    <div class="toolbar"><button class="btn" data-act="yedekAl">Yedek indir</button><label class="btn" for="yedek-dosya">Yedekten geri yükle / BizimHesap aktarımı</label><input type="file" id="yedek-dosya" accept=".json,.gz,application/json,application/gzip" style="display:none"></div>
+    ${mod==="bulut"?`<h3 style="margin-top:14px">Otomatik yedekler <span class="muted" style="font:500 13px var(--body)">her gece 03:07, 30 gün saklanır</span></h3>
+    <div class="toolbar"><button class="btn sm" data-act="yedekListe">Yedekleri göster</button><button class="btn sm" data-act="yedekSimdi">Şimdi yedek al</button></div>
+    <div id="yedek-liste">${YEDEKLER?(YEDEKLER.length?`<div class="tw"><table><tbody>${YEDEKLER.slice(0,30).map(y=>`<tr><td>${esc(y.ad.replace(".json.gz","").replace("_"," ").replace(/-(\d\d)$/,":$1"))}</td><td class="n">${(y.boyut/1048576).toLocaleString("tr-TR",{maximumFractionDigits:1})} MB</td><td class="right"><button class="btn sm" data-act="yedekIndir" data-v="${esc(y.ad)}">İndir</button></td></tr>`).join("")}</tbody></table></div>`:`<p class="muted">Henüz otomatik yedek yok.</p>`):""}</div>`:""}
     <p class="muted" style="font-size:13px;margin:0">Kayıt sayısı: ${list("isemirleri").length} iş emri, ${list("satislar").length} satış, ${list("araclar").length} araç, ${list("musteriler").length} müşteri, ${list("stok").length} stok kartı.</p>
   </div>`;
 };
@@ -1654,6 +1657,10 @@ const ACT={
     try{ const k=await isKaydetVeri(f,false); F=JSON.parse(JSON.stringify(S.isemirleri[k.id]||k)); modalCiz(); render(); toast("Teklif linki hazır. WhatsApp ile gönderebilirsiniz."); const el2=$("#f-teklif"); if(el2) el2.scrollIntoView({block:"center"}); }
     catch(e){ toast(hataMesaj(e)); if(el){ el.disabled=false; el.textContent="Teklif linki oluştur"; } } },
   teklifKopyala:async()=>{ try{ await navigator.clipboard.writeText(teklifLink(F)); toast("Link kopyalandı"); }catch(e){ prompt("Linki kopyalayın:",teklifLink(F)); } },
+  yedekListe:async()=>{ try{ const {data,error}=await sb.functions.invoke("yedek",{body:{islem:"liste"}}); if(error||data.hata) throw new Error((data&&data.hata)||error.message); YEDEKLER=data.liste; render(); }catch(e){ toast("Yedekler alınamadı: "+e.message); } },
+  yedekSimdi:async(d,el)=>{ if(el){el.disabled=true;el.textContent="Yedek alınıyor…";} try{ const {data,error}=await sb.functions.invoke("yedek",{body:{islem:"al"}}); if(error||data.hata) throw new Error((data&&data.hata)||error.message); toast(`Yedek alındı (${(data.boyut/1048576).toLocaleString("tr-TR",{maximumFractionDigits:1})} MB)`); await ACT.yedekListe(); }catch(e){ toast("Yedek alınamadı: "+e.message); render(); } },
+  yedekIndir:async d=>{ try{ const {data,error}=await sb.functions.invoke("yedek",{body:{islem:"indir",ad:d.v}}); if(error||data.hata) throw new Error((data&&data.hata)||error.message);
+      const r=await fetch(data.url); const metin=await new Response(r.body.pipeThrough(new DecompressionStream("gzip"))).text(); indir("oto-servis-yedek-"+d.v.replace(".json.gz",".json"),metin); }catch(e){ toast("İndirilemedi: "+e.message); } },
   sifreDegistir:()=>{ M="sifre"; F={}; modalCiz(); const el=$("#s-1"); if(el) el.focus(); },
   sifreKaydet:async()=>{ const a=$("#s-1").value, b=$("#s-2").value;
     if(a.length<8){ toast("Şifre en az 8 karakter olmalı"); return; } if(a!==b){ toast("İki şifre aynı değil"); return; }
@@ -1788,7 +1795,7 @@ const ACT={
   onayHayir:()=>{ const o=$("#onay-ov"); if(o) o.remove(); if(onayCb){const c=onayCb;onayCb=null;c(false);} }
 };
 
-for(const k of ["isSil","musSil","aracSil","stokSil","satisIptal","tahSil","giderSil","randevuSil","alisKaydet","alisIptal","tedOdemeKaydet","ayarKaydet","bhKaydet","kulEkle","kulCikar"]){ const f=ACT[k]; if(f) ACT[k]=(...a)=>YON()?f(...a):toast("Bu işlem için yönetici yetkisi gerekir"); }
+for(const k of ["isSil","musSil","aracSil","stokSil","satisIptal","tahSil","giderSil","randevuSil","yedekSimdi","yedekIndir","yedekListe","alisKaydet","alisIptal","tedOdemeKaydet","ayarKaydet","bhKaydet","kulEkle","kulCikar"]){ const f=ACT[k]; if(f) ACT[k]=(...a)=>YON()?f(...a):toast("Bu işlem için yönetici yetkisi gerekir"); }
 document.addEventListener("click",e=>{
   if(!e.target.closest(".gsearch")) genelKapat();
   if(e.target.closest("select,option")&&e.target.closest(".row,.kart")) return;
@@ -1863,18 +1870,18 @@ document.addEventListener("change",e=>{
   if(d.u==="satisKasa"){ UI.satisKasa=t.value; UI.satisKasaYon=UI.satisYontem+"|"+UI.satisDepo; return; }
   if(d.u==="kasaGun"){ UI.kasaGun=t.value||dInput(Date.now()); UI.kasaSayim=""; UI.kasaAcilis=""; UI.kasaNot=""; render(); return; }
   if(d.u!==undefined){ UI[d.u]=t.value; render(); return; }
-  if(t.id==="yedek-dosya"&&t.files&&t.files[0]){ const fr=new FileReader(); fr.onload=async()=>{ t.value="";
-      let o; try{ o=JSON.parse(fr.result); }catch(err){ toast("Dosya okunamadı. Programın indirdiği yedek dosyasını seçin."); return; }
+  if(t.id==="yedek-dosya"&&t.files&&t.files[0]){ const dosya=t.files[0]; (async()=>{ t.value="";
+      let metin; try{ metin=/\.gz$/i.test(dosya.name)?await new Response(dosya.stream().pipeThrough(new DecompressionStream("gzip"))).text():await new Promise((ok,no)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=no; fr.readAsText(dosya); }); }catch(err){ toast("Dosya açılamadı"); return; }
+      let o; try{ o=JSON.parse(metin); }catch(err){ toast("Dosya okunamadı. Programın indirdiği yedek dosyasını seçin."); return; }
       if(!o||!COLS.some(c=>o[c])){ toast("Bu dosya bir yedek dosyasına benzemiyor"); return; }
       const say=COLS.reduce((s,c)=>s+Object.keys(o[c]||{}).length,0);
       if(!await onay(o.kaynak==="BizimHesap"?`BizimHesap aktarımı: ${Object.keys(o.stok||{}).length} ürün, ${Object.keys(o.musteriler||{}).length} müşteri, ${Object.keys(o.araclar||{}).length} araç programa eklenecek. Birkaç dakika sürebilir.`:`${say} kayıt geri yüklenecek. Aynı numaralı kayıtların üzerine yazılır.`,o.kaynak==="BizimHesap"?"Aktar":"Geri yükle")) return;
-      const isler=[]; for(const c of ["musteriler","araclar","stok","isemirleri","satislar"]) for(const [id,v] of Object.entries(o[c]||{})) if(!(v.kaynak==="BizimHesap"&&S[c][id]&&S[c][id].kaynak==="BizimHesap")) isler.push([c,id,v]);
+      const isler=[]; for(const c of ["musteriler","araclar","stok","isemirleri","satislar","giderler","kasakapanis","randevular","alislar","tedarikciler",...(YON()?["maliyet"]:[])]) for(const [id,v] of Object.entries(o[c]||{})) if(!(v.kaynak==="BizimHesap"&&S[c][id]&&S[c][id].kaynak==="BizimHesap")) isler.push([c,id,v]);
       let n=0, hata=null; IMPORT={n:0,say:isler.length}; render();
       const isci=async()=>{ while(isler.length&&!hata){ const [c,id,v]=isler.shift(); try{ await put(c,id,v); n++; IMPORT.n=n; if(n%20===0) renderSoon(); }catch(err){ hata=err; } } };
       await Promise.all([isci(),isci(),isci(),isci(),isci()]);
       try{ if(!hata&&o.ayarlar) await put("ayarlar","genel",Object.assign({},DEF_AYAR,o.ayarlar)); }catch(err){ hata=err; }
-      IMPORT=null; render(); toast(hata?`${n} kayıt yüklendi, sonra durdu: ${hataMesaj(hata)} Dosyayı tekrar seçerseniz kaldığı yerden devam eder.`:`${n} kayıt aktarıldı`); };
-    fr.readAsText(t.files[0]); }
+      IMPORT=null; render(); toast(hata?`${n} kayıt yüklendi, sonra durdu: ${hataMesaj(hata)} Dosyayı tekrar seçerseniz kaldığı yerden devam eder.`:`${n} kayıt aktarıldı`); })(); }
 });
 document.addEventListener("dragstart",e=>{ const k=e.target.closest&&e.target.closest("[data-kart]"); if(!k) return; e.dataTransfer.setData("text/plain",k.dataset.kart); e.dataTransfer.effectAllowed="move"; });
 document.addEventListener("dragover",e=>{ const c=e.target.closest&&e.target.closest("[data-kolon]"); if(!c) return; e.preventDefault(); document.querySelectorAll(".kolon.uzerinde").forEach(x=>{ if(x!==c) x.classList.remove("uzerinde"); }); c.classList.add("uzerinde"); });

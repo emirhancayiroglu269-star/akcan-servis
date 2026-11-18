@@ -45,7 +45,8 @@ Deno.serve(async (req) => {
     const simdi = Date.now();
     const gun = new Date(simdi + 3 * 3600000).toISOString().slice(0, 10);
     const sayac = durum.sayac && durum.sayac.gun === gun ? durum.sayac : { gun, n: 0 };
-    const GUNLUK = 300;
+    // BizimHesap ekstre sorgusu günde ~200 civarında sınırlanıyor; 40 sorgu faturalaşma kontrolüne (bh-pull) ayrılır.
+    const GUNLUK = 140;
     if (!sinir && durum.bekle && simdi < durum.bekle) {
       return json({ ok: true, bekleme: new Date(durum.bekle).toISOString() });
     }

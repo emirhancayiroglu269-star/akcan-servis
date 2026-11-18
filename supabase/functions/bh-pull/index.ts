@@ -90,11 +90,11 @@ Deno.serve(async (req) => {
     const HK = (await getDoc("ayarlar", "bhhareket")) || { id: "bhhareket" };
     const simdi = Date.now(), bugunTR = new Date(simdi + 3 * 3600000).toISOString().slice(0, 10);
     if (!HK.sayac || HK.sayac.gun !== bugunTR) HK.sayac = { gun: bugunTR, n: 0 };
-    let ekstreIzin = musteriGrup.size > 0 && !(num(HK.bekle) > simdi) && simdi - num(HK.faturaKontrolSon) >= 10 * 60000 && num(HK.sayac.n) < 300;
+    let ekstreIzin = musteriGrup.size > 0 && !(num(HK.bekle) > simdi) && simdi - num(HK.faturaKontrolSon) >= 10 * 60000 && num(HK.sayac.n) < 180;
     if (musteriGrup.size && !ekstreIzin) not.push("faturalaşma kontrolü sırada");
     if (ekstreIzin) HK.faturaKontrolSon = simdi;
     for (const [cid, xs] of musteriGrup) {
-      if (!ekstreIzin || num(HK.sayac.n) >= 300) break;
+      if (!ekstreIzin || num(HK.sayac.n) >= 180) break;
       try {
         HK.sayac.n = num(HK.sayac.n) + 1;
         const ek = await bhGet(`/b2b/abstract/${cid}`);

@@ -1,0 +1,16 @@
+const {JSDOM}=require('jsdom');
+const html=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+const dom=new JSDOM(html,{runScripts:'dangerously',url:'https://x.test/#giderler',pretendToBeVisual:true});
+const w=dom.window; w.scrollTo=()=>{}; const errs=[]; w.addEventListener('error',e=>errs.push(e.message));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{ await sleep(100); const T=w.__test,S=T.S,d=w.document;
+ S.ayarlar; T.AY_set&&0;
+ const click=sel=>{const el=d.querySelector(sel); el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));};
+ const type=(sel,v,ev='input')=>{const el=d.querySelector(sel); el.value=v; el.dispatchEvent(new w.Event(ev,{bubbles:true}));};
+ click('[data-act="giderYeni"]'); click('[data-act="giderKatSec"][data-v="Yemek, çay"]'); type('#g-tutar','220');
+ type('#g-odeme','Kredi Kartı'); type('#g-odeme','Kredi Kartı','change');
+ console.log('kasa alani', !!d.querySelector('#g-kasa-k'));
+ click('[data-act="giderKaydet"]'); await sleep(100);
+ console.log(JSON.stringify(Object.values(S.giderler).map(g=>[g.kategori,g.odeme,g.kasaId])));
+ console.log('errors',errs); process.exit(0);
+})();

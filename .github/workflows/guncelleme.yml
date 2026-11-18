@@ -31,7 +31,7 @@ jobs:
         run: |
           node -e '
             const fs=require("fs");
-            for (const f of ["index.html","teklif.html"]) {
+            for (const f of ["index.html","teklif.html","randevu.html"]) {
               const h=fs.readFileSync(f,"utf8"); let i=0;
               for (const m of h.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
                 const p=`/tmp/${f}.${i++}.js`; fs.writeFileSync(p,m[1]);
@@ -39,6 +39,10 @@ jobs:
               }
               console.log(f, "tamam");
             }'
+      - name: Testler
+        run: |
+          npm install --no-audit --no-fund --silent
+          npm test
 
   fonksiyonlar:
     needs: kontrol

@@ -1,0 +1,27 @@
+const {JSDOM}=require('jsdom');
+const html=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+const dom=new JSDOM(html,{runScripts:'dangerously',url:'https://x.test/#stok',pretendToBeVisual:true});
+const w=dom.window; w.scrollTo=()=>{}; let opened=[]; w.open=(u)=>{opened.push(u);return null}; const errs=[]; w.addEventListener('error',e=>errs.push(e.message));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{ await sleep(100); const S=w.__test.S,d=w.document;
+ const click=sel=>{const el=d.querySelector(sel); if(!el) throw new Error('yok '+sel); el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));};
+ const type=(sel,v,ev='input')=>{const el=d.querySelector(sel); if(!el) throw new Error('yok '+sel); el.value=v; el.dispatchEvent(new w.Event(ev,{bubbles:true}));};
+ click('[data-act="stokYeni"]'); type('[data-st="kod"]','FLT-9'); type('[data-st="ad"]','GVA Yağ filtresi'); type('[data-st="oem"]','03C115561H 03C115561D'); type('[data-st="satis"]','300'); click('[data-act="stokKaydet"]'); await sleep(60);
+ click('[data-act="stokAc"]'); await sleep(10);
+ console.log('stok chips', [...d.querySelectorAll('#modal [data-act="tedSiteAc"]')].slice(0,3).map(b=>b.textContent+'|'+b.dataset.kod).join(' ; '));
+ click('#modal [data-act="tedSiteAc"]'); console.log('opened', opened[0]);
+ click('.hd [data-act="kapat"]');
+ w.location.hash='#isemirleri'; await sleep(40); click('[data-act="isYeni"]'); type('#f-plaka','34abc12','change');
+ click('[data-act="isSekme"][data-v="parca"]'); type('#f-ks','FLT-9'); click('#f-dd [data-act="kalemEkle"]');
+ click('[data-act="isSekme"][data-v="parca"]');
+ // rerender modal to show selector
+ click('[data-act="tklfEkle"]'); type('#tk-t-0','Oto İsmail'); type('#tk-f-0','180');
+ click('[data-act="tklfEkle"]'); type('#tk-t-1','Martaş'); type('#tk-f-1','150');
+ click('[data-act="siparisEkle"]'); click('[data-act="siparisSil"]');
+ const rows=[...d.querySelectorAll('#f-teklifler tbody tr')].map(r=>r.querySelector('[data-tk$=".tedarikci"]').value); console.log('sirali', rows.join(','));
+ click('#f-teklifler [data-act="tklfSiparis"]'); await sleep(10);
+ const sel=d.querySelector('[data-arakod]'); console.log('arakod opts', sel?sel.options.length:0);
+ click('[data-act="isKaydet"]'); await sleep(150);
+ const ie=Object.values(S.isemirleri)[0]; console.log('kayit', ie.teklifler.length, JSON.stringify(ie.siparisler.map(x=>[x.ad,x.tedarikci,x.not])));
+ console.log('errors',errs); process.exit(0);
+})().catch(e=>{console.log('FAIL',e.message,errs);process.exit(1)});

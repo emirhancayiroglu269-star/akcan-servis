@@ -1,0 +1,12 @@
+const {JSDOM}=require('jsdom');
+const html=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+const dom=new JSDOM(html,{runScripts:'dangerously',url:'https://x.test/#ayarlar',pretendToBeVisual:true});
+const w=dom.window; w.scrollTo=()=>{}; const errs=[]; w.addEventListener('error',e=>errs.push(e.message));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{ await sleep(100); const S=w.__test.S,d=w.document;
+ const yedek={surum:1,giderler:{g1:{id:'g1',tarih:Date.now(),kategori:'Kira',tutar:1000,odeme:'Nakit'}},musteriler:{m1:{id:'m1',ad:'Test',odemeler:[]}}};
+ const inp=d.querySelector('#yedek-dosya'); const f=new w.File([JSON.stringify(yedek)],'y.json',{type:'application/json'});
+ Object.defineProperty(inp,'files',{value:[f]}); inp.dispatchEvent(new w.Event('change',{bubbles:true})); await sleep(100);
+ const ov=d.querySelector('#onay-ov'); if(ov) d.querySelector('[data-act="onayEvet"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+ await sleep(200); console.log('restored', !!S.giderler.g1, !!S.musteriler.m1); console.log('errors',errs); process.exit(0);
+})();

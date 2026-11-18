@@ -78,7 +78,7 @@ jobs:
         if: steps.bul.outputs.liste != '' && env.ATLA != '1'
         run: |
           for f in ${{ steps.bul.outputs.liste }}; do
-            echo "== $f"; supabase functions deploy "$f" --project-ref "$PROJE" --use-api
+            echo "== $f"; supabase functions deploy "$f" --project-ref "$PROJE" --use-api --yes
           done
 
   veritabani:

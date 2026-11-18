@@ -1,0 +1,17 @@
+# Supabase CLI ayarları (GitHub Actions ile fonksiyon dağıtımı için).
+project_id = "amtgrdyongsmkrfdmhgq"
+
+[functions.bh-pull]
+verify_jwt = false
+[functions.bh-push]
+verify_jwt = false
+[functions.bh-hareket]
+verify_jwt = false
+[functions.bh-rapor]
+verify_jwt = false
+[functions.teklif]
+verify_jwt = false
+[functions.yedek]
+verify_jwt = false
+[functions.kullanici-yonet]
+verify_jwt = true

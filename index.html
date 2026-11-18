@@ -193,6 +193,7 @@ body.rol-usta .usta-yok{display:none!important}
   .bar-row{grid-template-columns:100px 1fr auto}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+.surum-uyari{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;background:var(--card,#fff);border:1px solid var(--line,#ccc);border-radius:10px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.18);display:flex;gap:10px;align-items:center;font-size:14px}
 </style>
 </head>
 <body>
@@ -2035,6 +2036,14 @@ window.addEventListener("hashchange",()=>{ view=hashView(); if(M) kapat(); rende
 
 try{ const g=localStorage.getItem("akcan_isgor"); if(g==="pano"||g==="liste") UI.isGorunum=g; }catch(e){}
 if("serviceWorker" in navigator&&location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+/* Yeni sürüm uyarısı: sayfa açıkken site güncellenirse kullanıcıya yenileme önerilir. */
+(function(){ if(location.protocol!=="https:") return; let ilk=null, gosterildi=false;
+  const ozet=t=>{ let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; return h; };
+  const kontrol=async()=>{ if(gosterildi||document.hidden) return; try{ const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"}); if(!r.ok) return; const h=ozet(await r.text());
+    if(ilk==null){ ilk=h; return; } if(h!==ilk){ gosterildi=true; const d=document.createElement("div"); d.className="surum-uyari";
+      d.innerHTML='Programın yeni sürümü hazır. <button class="btn sm pri" type="button">Şimdi yenile</button>';
+      d.querySelector("button").onclick=()=>location.reload(); document.body.appendChild(d); } }catch(e){} };
+  kontrol(); setInterval(kontrol,10*60000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) kontrol(); }); })();
 baslat();
 window.__test={vadeAnaliz,setAY:o=>{AY=o;},siparisOnerileri,TUK,SIP,masrafSatirlari,setRol:r=>{ROL=r;render();},izin,hesap,num,plakaFmt,plakaKey,istenenEtki,telKey,S};
 })();

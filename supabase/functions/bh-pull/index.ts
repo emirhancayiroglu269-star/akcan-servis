@@ -86,8 +86,17 @@ Deno.serve(async (req) => {
       if (!cid) continue;
       (musteriGrup.get(cid) || musteriGrup.set(cid, []).get(cid)!).push(x);
     }
+    // Ekstre okuması bh-hareket ile aynı günlük bütçeyi ve 429 beklemesini paylaşır; en sık 10 dakikada bir.
+    const HK = (await getDoc("ayarlar", "bhhareket")) || { id: "bhhareket" };
+    const simdi = Date.now(), bugunTR = new Date(simdi + 3 * 3600000).toISOString().slice(0, 10);
+    if (!HK.sayac || HK.sayac.gun !== bugunTR) HK.sayac = { gun: bugunTR, n: 0 };
+    let ekstreIzin = musteriGrup.size > 0 && !(num(HK.bekle) > simdi) && simdi - num(HK.faturaKontrolSon) >= 10 * 60000 && num(HK.sayac.n) < 300;
+    if (musteriGrup.size && !ekstreIzin) not.push("faturalaşma kontrolü sırada");
+    if (ekstreIzin) HK.faturaKontrolSon = simdi;
     for (const [cid, xs] of musteriGrup) {
+      if (!ekstreIzin || num(HK.sayac.n) >= 300) break;
       try {
+        HK.sayac.n = num(HK.sayac.n) + 1;
         const ek = await bhGet(`/b2b/abstract/${cid}`);
         // Tahsilat satırları da program no'sunu içerdiği için yalnızca belge satırlarına bakılır
         const satirlar = (ek.abstract || []).filter((a: Rec) => !/tahsilat|ödeme|devir/i.test(String(a.type || "") + " " + String(a.note || "")) || a.id);
@@ -98,7 +107,15 @@ Deno.serve(async (req) => {
           x.data.bhFaturali = true;
           await putDoc(x.col, x.id, x.data);
         }
-      } catch (e) { not.push("ekstre: " + (e as Error).message); }
+      } catch (e) {
+        const m = (e as Error).message; not.push("ekstre: " + m);
+        if (/429/.test(m)) { HK.bekle = Date.now() + 60 * 60000; ekstreIzin = false; }
+      }
+    }
+    if (musteriGrup.size && HK.faturaKontrolSon === simdi) {
+      const guncel = (await getDoc("ayarlar", "bhhareket")) || { id: "bhhareket" };
+      const say = guncel.sayac && guncel.sayac.gun === HK.sayac.gun ? Math.max(num(guncel.sayac.n), num(HK.sayac.n)) : HK.sayac.n;
+      await putDoc("ayarlar", "bhhareket", { ...guncel, faturaKontrolSon: simdi, sayac: { gun: HK.sayac.gun, n: say }, bekle: Math.max(num(guncel.bekle), num(HK.bekle)) || null });
     }
     const BEKLEYEN: Record<string, number> = {};
     for (const x of kayitlar) {

@@ -47,7 +47,8 @@ textarea{min-height:64px}
   const GA=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
   const gunAd=g=>{ const d=new Date(g+"T12:00:00"); return {kisa:GA[d.getDay()],no:d.getDate(),ay:d.toLocaleDateString("tr-TR",{month:"short"}),uzun:d.toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"})}; };
   const q=new URLSearchParams(location.search);
-  let V=null, S={depo:q.get("sube")||"",gun:"",saat:"",is:"",ad:"",tel:"",plaka:"",not:""}, HATA="";
+  let V=null, S={depo:q.get("sube")||"",gun:"",saat:"",is:"",ad:"",tel:"",plaka:"",detay:"",sasi:""}, HATA="";
+  const sasiNorm=v=>String(v||"").toLocaleUpperCase("tr-TR").replace(/[\s-]/g,"").replace(/İ/g,"I");
 
   async function yukle(depo){
     const r=await fetch(FN+(depo?"?depo="+encodeURIComponent(depo):""),{headers:{apikey:KEY}});
@@ -57,11 +58,11 @@ textarea{min-height:64px}
     if(!g||!g.slotlar.some(s=>s.bos)){ const ilk=j.gunler.find(x=>x.slotlar.some(s=>s.bos)); S.gun=ilk?ilk.gun:""; S.saat=""; }
     else if(S.saat&&!g.slotlar.some(s=>s.saat===S.saat&&s.bos)) S.saat="";
   }
-  function oku(){ for(const k of ["ad","tel","plaka","not"]){ const el=document.getElementById("f-"+k); if(el) S[k]=el.value; } }
+  function oku(){ for(const k of ["ad","tel","plaka","detay","sasi"]){ const el=document.getElementById("f-"+k); if(el) S[k]=el.value; } }
   function ciz(){
     const f=V.firma, g=V.gunler.find(x=>x.gun===S.gun);
     app.innerHTML=`
-    <div class="card"><h1>${esc(f.ad||"Online randevu")}</h1><div class="muted">${esc(f.adres||"")}${f.tel?` · <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:""}</div></div>
+    <div class="card"><h1>${esc(f.ad||"Online randevu")}</h1><div style="font-weight:600;margin-top:2px">${esc(V.depolar.length===1?V.depolar[0]+" servis":"Servis")} · online randevu</div><div class="muted">${esc(f.adres||"")}${f.tel?` · <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:""}</div></div>
     ${V.depolar.length>1?`<div class="card"><h2>1. Şube</h2><div class="seg">${V.depolar.map(d=>`<button class="opt ${d===S.depo?"sec":""}" data-depo="${esc(d)}">${esc(d)}</button>`).join("")}</div></div>`:""}
     <div class="card"><h2>${V.depolar.length>1?"2":"1"}. Gün</h2>
       <div class="gunler">${V.gunler.map(x=>{ const a=gunAd(x.gun), bos=x.slotlar.filter(s=>s.bos).length; return `<button class="gun ${x.gun===S.gun?"sec":""}" data-gun="${x.gun}" ${bos?"":"disabled"}><small>${a.kisa}</small><b>${a.no}</b><small>${x.kapali?"kapalı":bos?a.ay:"dolu"}</small></button>`; }).join("")}</div>
@@ -70,11 +71,12 @@ textarea{min-height:64px}
       ${g?`<div class="muted" style="margin-bottom:8px">${esc(gunAd(g.gun).uzun)}</div><div class="saatler">${g.slotlar.map(s=>`<button class="saat ${s.saat===S.saat?"sec":""}" data-saat="${s.saat}" ${s.bos?"":"disabled"}>${s.saat}</button>`).join("")}</div>`:`<p class="muted">Önümüzdeki günlerde boş saat yok. Lütfen bizi arayın.</p>`}
     </div>
     <div class="card"><h2>${V.depolar.length>1?"4":"3"}. Bilgileriniz</h2>
-      <label>Yapılacak iş<select id="f-is">${["",...V.hizmetler].map(h=>`<option value="${esc(h)}"${h===S.is?" selected":""}>${h?esc(h):"Seçin"}</option>`).join("")}</select></label>
+      <label>İşlem türü<select id="f-is">${["",...V.hizmetler].map(h=>`<option value="${esc(h)}"${h===S.is?" selected":""}>${h?esc(h):"Seçin"}</option>`).join("")}</select></label>
+      <label>Yapılacak iş / şikayet (detaylı) *<textarea id="f-detay" rows="4" placeholder="Örn. 2018 Ford Transit Custom, frenlerde ses var ve direksiyon titriyor; ayrıca periyodik bakım ve yağ değişimi yapılsın.">${esc(S.detay)}</textarea></label>
+      <label>Şase numarası (17 hane) *<input id="f-sasi" autocapitalize="characters" autocomplete="off" maxlength="21" placeholder="Ruhsatta (E) satırında yazar" value="${esc(S.sasi)}"></label>
       <label>Adınız soyadınız<input id="f-ad" autocomplete="name" value="${esc(S.ad)}"></label>
       <label>Cep telefonu<input id="f-tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="05xx xxx xx xx" value="${esc(S.tel)}"></label>
       <label>Plaka (isteğe bağlı)<input id="f-plaka" autocapitalize="characters" placeholder="34 ABC 123" value="${esc(S.plaka)}"></label>
-      <label>Not (isteğe bağlı)<textarea id="f-not" placeholder="Aracın markası, şikayetiniz…">${esc(S.not)}</textarea></label>
       <div class="gizli" aria-hidden="true"><label>Web sitesi<input id="f-web" tabindex="-1" autocomplete="off"></label></div>
       ${S.gun&&S.saat?`<div class="ozet">${esc(S.depo)} · ${esc(gunAd(S.gun).uzun)} · saat ${esc(S.saat)}</div>`:""}
       ${HATA?`<div class="hata">${esc(HATA)}</div>`:""}
@@ -89,9 +91,13 @@ textarea{min-height:64px}
   }
   async function gonder(){
     oku(); S.is=document.getElementById("f-is").value;
+    const sz=sasiNorm(S.sasi);
+    if(S.ad.trim().length<2){ HATA="Adınızı yazın."; ciz(); return; }
+    if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(sz)){ HATA=sz.length!==17?`Şase numarası 17 hane olmalı (şu an ${sz.length} hane). Ruhsatın (E) satırına bakın.`:"Şase numarasında I, O, Q harfleri bulunmaz; 0 ve 1 rakamlarını kontrol edin."; ciz(); const e=document.getElementById("f-sasi"); if(e) e.focus(); return; }
+    if(S.detay.trim().length<10){ HATA="Yapılacak işi ya da şikayeti biraz daha detaylı yazın."; ciz(); const e=document.getElementById("f-detay"); if(e) e.focus(); return; }
     const gb=document.getElementById("gonder"); gb.disabled=true; gb.textContent="Gönderiliyor…";
     try{
-      const r=await fetch(FN,{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify({depo:S.depo,gun:S.gun,saat:S.saat,is:S.is,ad:S.ad,tel:S.tel,plaka:S.plaka,not:S.not,web:document.getElementById("f-web").value})});
+      const r=await fetch(FN,{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify({depo:S.depo,gun:S.gun,saat:S.saat,is:S.is,ad:S.ad,tel:S.tel,plaka:S.plaka,detay:S.detay,sasi:sz,web:document.getElementById("f-web").value})});
       const j=await r.json();
       if(!r.ok||j.hata){ HATA=j.hata||"Gönderilemedi."; if(j.dolu){ await yukle(S.depo); } ciz(); return; }
       const f=V.firma;

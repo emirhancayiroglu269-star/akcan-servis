@@ -19,7 +19,10 @@ const telKey = (t: unknown) => { let s = String(t ?? "").replace(/\D/g, ""); if 
 const plakaKey = (p: unknown) => String(p ?? "").toLocaleUpperCase("tr-TR").replace(/[^0-9A-ZÇĞİÖŞÜ]/g, "");
 
 function ayar(A: any) {
-  const depolar = String(A.depolar || "Sultanbeyli, Velibaba").split(",").map((s) => s.trim()).filter(Boolean);
+  const tum = String(A.depolar || "Sultanbeyli, Velibaba").split(",").map((s) => s.trim()).filter(Boolean);
+  // Randevu yalnızca servis veren şubelerde (varsayılan: Sultanbeyli)
+  let depolar = String(A.randevuSubeler ?? "Sultanbeyli").split(",").map((s) => s.trim()).filter((d) => d && tum.includes(d));
+  if (!depolar.length) depolar = [tum[0] || "Sultanbeyli"];
   const kapali = String(A.randevuKapaliGunler ?? "pazar").toLocaleLowerCase("tr-TR").split(",").map((s) => s.trim()).filter(Boolean);
   return {
     acik: String(A.onlineRandevu ?? "acik") !== "kapali",
@@ -31,7 +34,7 @@ function ayar(A: any) {
     kapaliGun: kapali.map((g) => GUNLER.indexOf(g)).filter((i) => i >= 0),
     hizmetler: String(A.randevuHizmetler || "Periyodik bakım, Arıza tespiti, Fren, Lastik, Klima, Diğer").split(",").map((s) => s.trim()).filter(Boolean),
     depolar,
-    firma: { ad: A.firma || "", tel: A.tel || "", adres: A.adres || "" },
+    firma: { ad: A.firma || "", tel: A.randevuTel || A.tel || "", adres: A.randevuAdres || "" },
   };
 }
 
@@ -83,10 +86,13 @@ Deno.serve(async (req) => {
       if (b.web) return yanit({ ok: true }); // bot tuzağı
       const ad = String(b.ad || "").trim().slice(0, 80), tel = telKey(b.tel), plaka = plakaKey(b.plaka).slice(0, 12);
       const depo = C.depolar.includes(b.depo) ? b.depo : "", gun = String(b.gun || ""), saatS = String(b.saat || "");
-      const is = String(b.is || "").trim().slice(0, 80), not = String(b.not || "").trim().slice(0, 500);
+      const is = String(b.is || "").trim().slice(0, 80), detay = String(b.detay || "").trim().slice(0, 1000);
+      const sasi = String(b.sasi || "").toLocaleUpperCase("tr-TR").replace(/[\s-]/g, "").replace(/İ/g, "I");
       if (ad.length < 2) return yanit({ hata: "Adınızı yazın." }, 400);
       if (!/^5\d{9}$/.test(tel)) return yanit({ hata: "Cep telefonunuzu 05xx xxx xx xx şeklinde yazın." }, 400);
       if (!depo) return yanit({ hata: "Şube seçin." }, 400);
+      if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(sasi)) return yanit({ hata: "Şase numarasını ruhsattaki gibi 17 hane olarak yazın (I, O, Q harfleri bulunmaz)." }, 400);
+      if (detay.length < 10) return yanit({ hata: "Yapılacak işi ya da aracın şikayetini biraz daha detaylı yazın." }, 400);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(gun) || gun < bugun || gun > sonGun) return yanit({ hata: "Geçerli bir gün seçin." }, 400);
       const m = dk(saatS, -1); if (m < 0) return yanit({ hata: "Saat seçin." }, 400);
       const t = gunBasi(gun) + m * 60000;
@@ -103,7 +109,7 @@ Deno.serve(async (req) => {
       if (!s || !s.bos) return yanit({ hata: "Bu saat az önce doldu. Lütfen başka bir saat seçin.", dolu: true }, 409);
 
       const id = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
-      const doc = { id, tarih: t, sure: C.slot, plaka, aracId: null, musteriAd: ad, tel: "0" + tel, depo, is: is || "Randevu", not,
+      const doc = { id, tarih: t, sure: C.slot, plaka, sasi, aracId: null, musteriAd: ad, tel: "0" + tel, depo, is: is || "Randevu", detay,
         durum: "Talep", kaynak: "online", isEmriId: null, olusturma: simdi, guncelleme: simdi };
       const { error } = await sb.from("docs").insert({ col: "randevular", id, data: doc });
       if (error) throw error;

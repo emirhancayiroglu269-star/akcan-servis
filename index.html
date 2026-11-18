@@ -231,7 +231,7 @@ const TESLIM_ALINAN=["Ruhsat","Anahtar","Yedek anahtar","Stepne","Kriko","Yangı
 const YAKIT=["Boş","1/4","1/2","3/4","Dolu"];
 const DEF_AYAR={firma:"AKCAN GROUP OTOMOTİV",adres:"",tel:"",vergi:"",teknisyenler:"Usta 1, Usta 2",depolar:"Sultanbeyli, Velibaba",onek:"SRV",
   sablon:"Sayın {musteri}, {plaka} plakalı aracınızın servis durumu: {durum}. Tutar: {tutar}. {firma} {tel}",
-  vadeGun:"30",onlineRandevu:"acik",randevuBas:"09:00",randevuBit:"18:00",randevuSlot:"60",randevuSlotKap:"2",randevuIleriGun:"21",randevuKapaliGunler:"pazar",randevuHizmetler:"Periyodik bakım, Arıza tespiti, Fren, Lastik, Klima, Diğer",
+  vadeGun:"30",onlineRandevu:"acik",randevuSubeler:"Sultanbeyli",randevuBas:"09:00",randevuBit:"18:00",randevuSlot:"60",randevuSlotKap:"2",randevuIleriGun:"21",randevuKapaliGunler:"pazar",randevuHizmetler:"Periyodik bakım, Arıza tespiti, Fren, Lastik, Klima, Diğer",
   randevuHatirlatSablon:"Sayın {musteri}, yarın {tarih} saat {saat} {sube} şubemizde {plaka} randevunuzu hatırlatırız. Gelemeyecekseniz lütfen haber verin. {firma} {tel}",
   randevuOnaySablon:"Sayın {musteri}, {tarih} saat {saat} için {sube} şubemizde randevunuz onaylanmıştır. {firma} {tel}",
   randevuRedSablon:"Sayın {musteri}, {tarih} saat {saat} için randevu talebinizi maalesef karşılayamıyoruz. Size uygun başka bir saat için bizi arayabilirsiniz. {firma} {tel}",hatirlatmaSablon:"Sayın {musteri}, {firma} cari hesabınızda vadesi geçmiş {tutar} tutarında bakiye bulunmaktadır (en eski {gun} gün). Toplam bakiyeniz {bakiye}. Ödeme için bilginize sunarız. {tel}",
@@ -1076,7 +1076,8 @@ V.ayarlar=()=>{const A=S.ayarlar;
   <div class="card usta-yok" style="margin-top:16px"><h2>Online randevu <span class="sub">müşterinin linkten randevu talebi bırakması</span></h2>
     <p style="margin:0 0 8px">Link: <a href="${esc(randevuLink())}" target="_blank" rel="noopener">${esc(randevuLink())}</a> <button class="btn sm" data-act="randevuLinkKopyala">Kopyala</button></p>
     <div class="fg"><label class="f">Durum<select id="a-onrand" data-a="onlineRandevu">${["acik","kapali"].map(v=>`<option value="${v}"${(A.onlineRandevu||"acik")===v?" selected":""}>${v==="acik"?"Açık":"Kapalı"}</option>`).join("")}</select></label>
-    ${f("randevuBas","Başlangıç saati","09:00")}${f("randevuBit","Bitiş saati","18:00")}${f("randevuSlot","Randevu aralığı (dk)","60")}${f("randevuSlotKap","Aynı saatte en fazla (her şube)","2")}${f("randevuKapasite","Günlük kapasite (her şube)","8")}${f("randevuIleriGun","Kaç gün ilerisi seçilebilir","21")}${f("randevuKapaliGunler","Kapalı günler (virgülle)","pazar")}</div>
+    ${f("randevuSubeler","Randevu alan şube(ler)","Sultanbeyli")}${f("randevuTel","Randevu sayfası telefonu",A.tel||"")}${f("randevuBas","Başlangıç saati","09:00")}${f("randevuBit","Bitiş saati","18:00")}${f("randevuSlot","Randevu aralığı (dk)","60")}${f("randevuSlotKap","Aynı saatte en fazla (her şube)","2")}${f("randevuKapasite","Günlük kapasite (her şube)","8")}${f("randevuIleriGun","Kaç gün ilerisi seçilebilir","21")}${f("randevuKapaliGunler","Kapalı günler (virgülle)","pazar")}</div>
+    <label class="f" style="margin-top:10px">Servis adresi (randevu sayfasında görünür)<textarea id="a-radres" data-a="randevuAdres" placeholder="Sultanbeyli servis adresi">${esc(A.randevuAdres||"")}</textarea></label>
     <label class="f" style="margin-top:10px">Seçilebilecek işler (virgülle)<input id="a-rhiz" data-a="randevuHizmetler" value="${esc(A.randevuHizmetler||"")}"></label>
     <label class="f" style="margin-top:10px">WhatsApp onay mesajı<textarea id="a-ronay" data-a="randevuOnaySablon">${esc(A.randevuOnaySablon||"")}</textarea></label>
     <label class="f" style="margin-top:10px">WhatsApp red mesajı<textarea id="a-rred" data-a="randevuRedSablon">${esc(A.randevuRedSablon||"")}</textarea></label>
@@ -1364,13 +1365,14 @@ const RDURUM_AD={"Talep":"Onay bekliyor"};
 const randevuMesaj=(sab,x)=>sablonDoldur(S.ayarlar[sab]||DEF_AYAR[sab],{musteri:x.musteriAd||"müşterimiz",plaka:x.plaka?plakaFmt(x.plaka)+" plakalı aracınız için":"",tarih:new Date(x.tarih).toLocaleDateString("tr-TR",{day:"numeric",month:"long",weekday:"long"}),saat:saat(x.tarih),sube:x.depo||""}).replace(/\s+/g," ").trim();
 const randevuRow=x=>`<div class="row" tabindex="0" data-act="randevuAc" data-id="${esc(x.id)}">
   <div class="lead" style="font-weight:800;font-variant-numeric:tabular-nums">${saat(x.tarih)}</div>
-  <div class="main"><div class="t1">${x.plaka?`<span class="plaka" style="font-size:14px">${esc(plakaFmt(x.plaka))}</span> `:""}${esc(x.musteriAd||"")}</div><div class="t2">${esc([x.is,x.depo,x.sure?x.sure+" dk":""].filter(Boolean).join(" · "))}</div></div>
+  <div class="main"><div class="t1">${x.plaka?`<span class="plaka" style="font-size:14px">${esc(plakaFmt(x.plaka))}</span> `:""}${esc(x.musteriAd||"")}</div><div class="t2">${esc([x.is,x.depo,x.sure?x.sure+" dk":""].filter(Boolean).join(" · "))}</div>${x.detay?`<div class="t2" style="white-space:normal">${esc(String(x.detay).slice(0,140))}${String(x.detay).length>140?"…":""}</div>`:""}</div>
   <div class="end"><span class="pill ${RDURUM[x.durum]||"p-Beklemede"}">${esc(RDURUM_AD[x.durum]||x.durum)}</span>${x.kaynak==="online"?`<div class="t2">online</div>`:""}${x.durum==="Talep"?`<div style="margin-top:4px;display:flex;gap:6px;justify-content:flex-end"><button class="btn sm" data-act="randevuReddet" data-id="${esc(x.id)}">Reddet</button><button class="btn sm pri" data-act="randevuOnayla" data-id="${esc(x.id)}">Onayla</button></div>`:x.durum==="Bekleniyor"?`<div style="margin-top:4px"><button class="btn sm pri" data-act="randevuGeldi" data-id="${esc(x.id)}">Geldi · iş emri aç</button></div>`:x.isEmriId&&S.isemirleri[x.isEmriId]?`<div class="t2">${esc(S.isemirleri[x.isEmriId].no)}</div>`:""}</div></div>`;
 function randevuAyar(){ const A=S.ayarlar, dkf=(v,d)=>{ const m=String(v||"").match(/^(\d{1,2})[:.](\d{2})$/); return m?+m[1]*60+ +m[2]:d; };
   return {bas:dkf(A.randevuBas,540),bit:dkf(A.randevuBit,1080),slot:Math.max(15,num(A.randevuSlot)||60),kap:Math.max(1,num(A.randevuSlotKap)||2)}; }
+const randevuSubeleri=()=>{ const t=depolar(), r=String(S.ayarlar.randevuSubeler||"Sultanbeyli").split(",").map(x=>x.trim()).filter(x=>x&&t.includes(x)); return r.length?r:[t[0]||"Sultanbeyli"]; };
 const randevuLink=()=>location.origin+location.pathname.replace(/[^/]*$/,"")+"randevu.html";
 function randevuTakvimHTML(b,R){
-  const C=randevuAyar(), dp=depolar(), aktif=R.filter(x=>!["İptal","Gelmedi"].includes(x.durum));
+  const C=randevuAyar(), dp=randevuSubeleri(), aktif=R.filter(x=>!["İptal","Gelmedi"].includes(x.durum));
   let bas=C.bas, bit=C.bit; for(const x of aktif){ const m=Math.round((x.tarih-b)/60000); bas=Math.min(bas,Math.floor(m/C.slot)*C.slot); bit=Math.max(bit,m+num(x.sure||60)); }
   const satir=[]; for(let m=bas;m<bit;m+=C.slot) satir.push(m);
   const hh=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"), simdi=Date.now();
@@ -1385,7 +1387,7 @@ V.randevu=()=>{
   const hb=b-((new Date(b).getDay()+6)%7)*86400000;
   const hafta=[0,1,2,3,4,5,6].map(i=>{ const t=new Date(new Date(hb).getFullYear(),new Date(hb).getMonth(),new Date(hb).getDate()+i).getTime(); return {t,n:gunSay(t)}; });
   const R=list("randevular").filter(x=>x.tarih>=b&&x.tarih<b+86400000).sort((a,c)=>a.tarih-c.tarih);
-  const GA=["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"], kapT=kap*Math.max(1,depolar().length);
+  const GA=["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"], kapT=kap*Math.max(1,randevuSubeleri().length);
   const talep=list("randevular").filter(x=>x.durum==="Talep"&&x.tarih>=gunBasi(Date.now())).sort((a,c)=>a.tarih-c.tarih);
   const yb=gunBasi(Date.now())+86400000, yarin=list("randevular").filter(x=>x.tarih>=yb&&x.tarih<yb+86400000&&x.durum==="Bekleniyor").sort((a,c)=>a.tarih-c.tarih);
   const takvim=UI.randevuGorunum!=="liste";
@@ -1407,9 +1409,11 @@ function randevuHTML(){ const x=F, yeni=!x.id;
     <label class="f">Plaka<input id="r-plaka" data-m="plaka" list="dl-plaka-r" value="${esc(x.plaka?plakaFmt(x.plaka):"")}" placeholder="34 ABC 123"></label>
     <label class="f">Müşteri<input id="r-mus" data-m="musteriAd" value="${esc(x.musteriAd||"")}"></label>
     <label class="f">Telefon<input id="r-tel" type="tel" data-m="tel" value="${esc(x.tel||"")}"></label>
-    <label class="f">Depo<select id="r-depo" data-m="depo">${opt(depolar(),x.depo)}</select></label>
+    <label class="f">Şube<select id="r-depo" data-m="depo">${opt([...new Set(randevuSubeleri().concat(x.depo?[x.depo]:[]))],x.depo)}</select></label>
+    <label class="f">Şase no<input id="r-sasi" data-m="sasi" value="${esc(x.sasi||"")}" maxlength="21" autocapitalize="characters"></label>
   </div>
-  <label class="f" style="margin-top:10px">Yapılacak iş<input id="r-is" data-m="is" value="${esc(x.is||"")}" placeholder="Periyodik bakım, fren kontrolü…"></label>
+  <label class="f" style="margin-top:10px">İşlem türü<input id="r-is" data-m="is" value="${esc(x.is||"")}" placeholder="Periyodik bakım, fren kontrolü…"></label>
+  <label class="f" style="margin-top:10px">Yapılacak iş / şikayet (detay)<textarea id="r-detay" data-m="detay" rows="3">${esc(x.detay||"")}</textarea></label>
   <datalist id="dl-plaka-r">${list("araclar").map(a=>`<option value="${esc(plakaFmt(a.plaka))}">${esc((S.musteriler[a.musteriId]||{}).ad||"")}</option>`).join("")}</datalist>
   ${x.not?`<p class="muted" style="margin:10px 0 0"><b>Müşteri notu:</b> ${esc(x.not)}</p>`:""}${x.kaynak==="online"?`<p class="muted" style="margin:6px 0 0">Online randevu sayfasından geldi${x.olusturma?" · "+tarihSaat(x.olusturma):""}</p>`:""}
   ${yeni?"":`<div class="toolbar" style="margin-top:10px">${(x.durum==="Talep"?["Talep","Bekleniyor","İptal"]:["Bekleniyor","Gelmedi","İptal"]).map(d=>`<button class="chip ${x.durum===d?"on":""}" data-act="randevuDurum" data-v="${d}">${d==="Talep"?"Onay bekliyor":d==="Bekleniyor"&&x.durum==="Talep"?"Onayla":d}</button>`).join("")}${x.isEmriId&&S.isemirleri[x.isEmriId]?`<button class="btn sm" data-act="isAc" data-id="${esc(x.isEmriId)}">İş emrini aç (${esc(S.isemirleri[x.isEmriId].no)})</button>`:""}</div>`}
@@ -1418,7 +1422,7 @@ function randevuHTML(){ const x=F, yeni=!x.id;
 function randevuYeni(arac,tarihMs,depo){
   const m=arac?S.musteriler[arac.musteriId]:null;
   let t=tarihMs; if(!t){ const d=fromInput(UI.randevuGun)||gunBasi(Date.now()); const n=new Date(); t=dInput(d)===dInput(n.getTime())?new Date(Math.ceil(n.getTime()/1800000)*1800000).getTime():d+9*3600000; }
-  F={id:null,tarihStr:dtInput(t),sure:60,plaka:arac?arac.plaka:"",aracId:arac?arac.id:null,musteriAd:m?m.ad:"",tel:m?m.tel||"":"",depo:depo||depolar()[0]||"",is:arac&&arac.sonrakiBakimTarih?"Periyodik bakım":"",durum:"Bekleniyor"};
+  F={id:null,tarihStr:dtInput(t),sure:60,plaka:arac?arac.plaka:"",aracId:arac?arac.id:null,musteriAd:m?m.ad:"",tel:m?m.tel||"":"",depo:depo||randevuSubeleri()[0]||"",sasi:arac?arac.sasi||"":"",detay:"",is:arac&&arac.sonrakiBakimTarih?"Periyodik bakım":"",durum:"Bekleniyor"};
   M="randevu"; modalCiz();
 }
 
@@ -1815,13 +1819,13 @@ const ACT={
     const id=x.id||uid(), eski=S.randevular[id]||{};
     const kap=num(S.ayarlar.randevuKapasite)||8, bg=gunBasi(t), say=list("randevular").filter(y=>y.id!==id&&y.tarih>=bg&&y.tarih<bg+86400000&&!["İptal","Gelmedi"].includes(y.durum)&&(y.depo||"")===(x.depo||"")).length;
     if(!x.id&&say>=kap&&!await onay(`O gün ${x.depo||""} şubesinde ${say} randevu var (günlük kapasite ${kap}). Yine de eklensin mi?`,"Ekle")) return;
-    await put("randevular",id,{...eski,tarih:t,sure:num(x.sure)||60,plaka:pk,aracId:a?a.id:(x.aracId||null),musteriAd:String(x.musteriAd||"").trim()||(m?m.ad:""),tel:String(x.tel||"").trim()||(m?m.tel||"":""),depo:x.depo||"",is:x.is||"",durum:x.durum||"Bekleniyor",isEmriId:eski.isEmriId||null,olusturma:eski.olusturma||Date.now()});
+    await put("randevular",id,{...eski,tarih:t,sure:num(x.sure)||60,plaka:pk,aracId:a?a.id:(x.aracId||null),musteriAd:String(x.musteriAd||"").trim()||(m?m.ad:""),tel:String(x.tel||"").trim()||(m?m.tel||"":""),depo:x.depo||"",is:x.is||"",sasi:String(x.sasi||"").toLocaleUpperCase("tr-TR").replace(/[\s-]/g,"")||(a?a.sasi||"":""),detay:String(x.detay||"").trim(),durum:x.durum||"Bekleniyor",isEmriId:eski.isEmriId||null,olusturma:eski.olusturma||Date.now()});
     toast("Randevu kaydedildi"); UI.randevuGun=dInput(t); kapat(); },
   randevuSil:async()=>{ if(!await onay("Randevu silinsin mi?","Sil")) return; await del("randevular",F.id); toast("Randevu silindi"); kapat(); },
   randevuGeldi:async d=>{ const x=S.randevular[d.id]; if(!x) return;
     const a=x.aracId?S.araclar[x.aracId]:(x.plaka?list("araclar").find(y=>plakaKey(y.plaka)===x.plaka):null);
     isYeni(a||null); if(!a){ F.plaka=x.plaka?plakaFmt(x.plaka):""; F.musteriAd=x.musteriAd||""; F.musteriTel=x.tel||""; }
-    F.sikayet=x.is||""; F.depo=x.depo||F.depo; F.randevuId=x.id; modalCiz();
+    F.sikayet=[x.is&&x.is!=="Randevu"?x.is:"",x.detay||x.not||""].filter(Boolean).join(" — "); if(x.sasi&&!F.sasi) F.sasi=x.sasi; F.depo=x.depo||F.depo; F.randevuId=x.id; modalCiz();
     await put("randevular",x.id,Object.assign({},x,{durum:"Geldi",gelis:Date.now()})); },
   siparisKalem:d=>{ siparisYeni(d.v); },
   siparisSil:d=>{ F.siparisler.splice(+d.i,1); modalCiz(); },

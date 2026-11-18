@@ -692,7 +692,7 @@ function kasaVeri(gun,depo){
   if(depo==="Tümü") for(const m of list("musteriler")) for(const o of m.odemeler||[]) if(o.t>=b&&o.t<e) tah.push({t:o.t,a:`Cari tahsilat · ${m.ad}`,yontem:o.yontem||"Nakit",tutar:num(o.tutar),kasaId:o.kasaId||""});
   for(const a of list("alislar")) if(!a.iptal&&dOk(a.depo)) for(const o of a.odemeler||[]) if(o.t>=b&&o.t<e) gid.push({t:o.t,a:`Tedarikçi ödemesi · ${a.tedarikciAd||""} · ${a.no}`,yontem:o.yontem||"Nakit",tutar:num(o.tutar)});
   if(depo==="Tümü") for(const td of list("tedarikciler")) for(const o of td.odemeler||[]) if(o.t>=b&&o.t<e) gid.push({t:o.t,a:`Tedarikçi ödemesi · ${td.ad}`,yontem:o.yontem||"Nakit",tutar:num(o.tutar)});
-  for(const g of list("giderler")) if((g.tarih||0)>=b&&(g.tarih||0)<e&&dOk(g.depo)) gid.push({t:g.tarih,a:`${g.kategori}${g.aciklama?" · "+g.aciklama:""}`,yontem:g.odeme||"Nakit",tutar:num(g.tutar),id:g.id});
+  for(const g of list("giderler")) if((g.tarih||0)>=b&&(g.tarih||0)<e&&dOk(g.depo)) gid.push({t:g.tarih,a:`${g.kategori}${g.aciklama?" · "+g.aciklama:""}${g.kasaId?" · "+kasaAdi(g.kasaId):""}`,yontem:g.odeme||"Nakit",tutar:num(g.tutar),id:g.id});
   const bh=depo==="Tümü"?bhHareketler(b,e).filter(bhTahsilatMi):[];
   const yon={}; for(const y of ["Nakit","Kredi Kartı","Havale/EFT"]) yon[y]={tah:0,gid:0,bh:0};
   for(const t of tah) (yon[t.yontem]||(yon[t.yontem]={tah:0,gid:0,bh:0})).tah+=t.tutar;
@@ -810,7 +810,7 @@ V.giderler=()=>{
   <div class="tiles"><div class="tile hl"><div class="k">Toplam gider (${tum.length})</div><div class="v">${TL(top)}</div></div>
     ${katL.slice(0,4).map(([k,v])=>`<div class="tile"><div class="k">${esc(k)}</div><div class="v">${TL(v)}</div></div>`).join("")}</div>
   <div class="toolbar chips">${["Tümü",...katL.map(k=>k[0])].map(k=>`<button class="chip ${UI.giderKat===k?"on":""}" data-act="giderKat" data-v="${esc(k)}">${esc(k)}</button>`).join("")}</div>
-  <div class="card"><div class="list">${rs.map(g=>`<div class="row" tabindex="0" data-act="giderAc" data-id="${esc(g.id)}"><div class="lead" style="font-variant-numeric:tabular-nums">${tarih(g.tarih)}</div><div class="main"><div class="t1">${esc(g.kategori)}</div><div class="t2">${esc([g.aciklama,g.odeme,g.depo].filter(Boolean).join(" · "))}</div></div><div class="end"><b>${TL(g.tutar)}</b></div></div>`).join("")||`<div class="empty">Bu aralıkta gider yok. Kira, maaş, fatura gibi giderleri girdikçe Raporlar'da net kâr hesaplanır.</div>`}</div></div>
+  <div class="card"><div class="list">${rs.map(g=>`<div class="row" tabindex="0" data-act="giderAc" data-id="${esc(g.id)}"><div class="lead" style="font-variant-numeric:tabular-nums">${tarih(g.tarih)}</div><div class="main"><div class="t1">${esc(g.kategori)}</div><div class="t2">${esc([g.aciklama,g.odeme,g.kasaId?kasaAdi(g.kasaId):"",g.depo].filter(Boolean).join(" · "))}</div></div><div class="end"><b>${TL(g.tutar)}</b></div></div>`).join("")||`<div class="empty">Bu aralıkta gider yok. Kira, maaş, fatura gibi giderleri girdikçe Raporlar'da net kâr hesaplanır.</div>`}</div></div>
   <p class="muted" style="font-size:13px">Stoğa giren parça alımlarını buraya yazmayın: onların maliyeti satışta zaten brüt kârdan düşülüyor. Giderler BizimHesap'a gönderilmez.</p>`;
 };
 function giderHTML(){ const g=F, yeni=!g.id;
@@ -819,8 +819,9 @@ function giderHTML(){ const g=F, yeni=!g.id;
     <label class="f">Tarih<input type="date" id="g-tarih" data-m="tarihStr" value="${esc(g.tarihStr)}"></label>
     <label class="f">Kategori<input id="g-kat" data-m="kategori" list="dl-gkat" value="${esc(g.kategori)}" autocomplete="off"></label>
     <label class="f">Tutar (₺)<input id="g-tutar" data-m="tutar" inputmode="decimal" value="${esc(g.tutar)}"></label>
-    <label class="f">Ödeme şekli<select id="g-odeme" data-m="odeme">${opt(["Nakit","Kredi Kartı","Havale/EFT"],g.odeme)}</select></label>
-    <label class="f">Depo<select id="g-depo" data-m="depo"><option value="">Genel</option>${opt(depolar(),g.depo)}</select></label>
+    <label class="f">Ödeme şekli<select id="g-odeme" data-m="odeme" data-gyon="1">${opt(["Nakit","Kredi Kartı","Havale/EFT"],g.odeme)}</select></label>
+    <label class="f">Hangi kasa / banka<span id="g-kasa-k">${kasaSecHTML("g-kasa",g.depo,g.odeme||"Nakit",g.kasaId)}</span></label>
+    <label class="f">Depo<select id="g-depo" data-m="depo" data-gyon="1"><option value="">Genel</option>${opt(depolar(),g.depo)}</select></label>
     <label class="f">Açıklama<input id="g-acik" data-m="aciklama" value="${esc(g.aciklama||"")}"></label>
   </div>
   <datalist id="dl-gkat">${[...new Set([...GIDER_KAT,...list("giderler").map(x=>x.kategori)])].map(k=>`<option value="${esc(k)}">`).join("")}</datalist>
@@ -1695,7 +1696,8 @@ const ACT={
     const id=g.id||uid(), eski=S.giderler[id]||{};
     let tarihMs=fromInput(g.tarihStr)||gunBasi(Date.now());
     if(dInput(tarihMs)===dInput(Date.now())) tarihMs=eski.tarih&&dInput(eski.tarih)===g.tarihStr?eski.tarih:Date.now(); else tarihMs+=12*3600000;
-    await put("giderler",id,{tarih:tarihMs,kategori:String(g.kategori).trim(),tutar:r2(t),odeme:g.odeme||"Nakit",depo:g.depo||"",aciklama:g.aciklama||"",olusturma:eski.olusturma||Date.now()});
+    const kasaEl=$("#g-kasa"); const kasaId=kasaEl?kasaEl.value:(g.kasaId||"");
+    await put("giderler",id,{tarih:tarihMs,kategori:String(g.kategori).trim(),tutar:r2(t),odeme:g.odeme||"Nakit",kasaId,depo:g.depo||"",aciklama:g.aciklama||"",olusturma:eski.olusturma||Date.now()});
     toast("Gider kaydedildi"); kapat(); },
   giderSil:async()=>{ if(!await onay("Bu gider silinsin mi?","Sil")) return; await del("giderler",F.id); toast("Gider silindi"); kapat(); },
   bhTip:d=>{UI.bhTip=d.v;render();},
@@ -1857,6 +1859,8 @@ document.addEventListener("change",e=>{
   if(d.durumId){ durumDegistir(d.durumId,t.value); return; }
   if(d.alg!==undefined&&F){ F.alisGuncelle=t.checked; return; }
   if(d.arakod!==undefined&&F){ F._araKod=t.value; modalCiz(); return; }
+  if(t.id==="g-kasa"&&F&&M==="gider"){ F.kasaId=t.value; return; }
+  if(d.gyon!==undefined&&F&&M==="gider"){ F.kasaId=""; const k=$("#g-kasa-k"); if(k) k.innerHTML=kasaSecHTML("g-kasa",F.depo,F.odeme||"Nakit"); return; }
   if(d.alyon!==undefined&&F){ const k=$("#al-od-kasa-k"); if(k) k.innerHTML=kasaSecHTML("al-od-kasa",F.depo,t.value); return; }
   if(d.tyon!==undefined){ const k=$("#t-od-kasa-k"); if(k) k.innerHTML=kasaSecHTML("t-od-kasa","",t.value); return; }
   if(M==="alis"&&t.id==="al-ted"&&F){ modalCiz(); return; }

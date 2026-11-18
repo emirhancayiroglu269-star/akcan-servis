@@ -805,14 +805,54 @@ V.giderler=()=>{
   const kat={}; for(const g of tum) kat[g.kategori]=(kat[g.kategori]||0)+num(g.tutar);
   const top=tum.reduce((t,g)=>t+num(g.tutar),0), katL=Object.entries(kat).sort((x,y)=>y[1]-x[1]);
   const ar=[["bugun","Bugün"],["hafta","Bu hafta"],["ay","Bu ay"],["gecenay","Geçen ay"],["tumu","Tümü"]];
-  return `<div class="top"><h1>Giderler</h1><button class="btn pri" data-act="giderYeni">Gider ekle</button></div>
+  return `<div class="top"><h1>Giderler</h1><div class="toolbar" style="margin:0"><label class="btn" for="masraf-dosya">BizimHesap Excel'i yükle</label><input type="file" id="masraf-dosya" accept=".xlsx,.xls" style="display:none"><button class="btn pri" data-act="giderYeni">Gider ekle</button></div></div>
   <div class="toolbar chips">${ar.map(([k,t])=>`<button class="chip ${UI.giderAralik===k?"on":""}" data-act="giderAralik" data-v="${k}">${t}</button>`).join("")}</div>
   <div class="tiles"><div class="tile hl"><div class="k">Toplam gider (${tum.length})</div><div class="v">${TL(top)}</div></div>
     ${katL.slice(0,4).map(([k,v])=>`<div class="tile"><div class="k">${esc(k)}</div><div class="v">${TL(v)}</div></div>`).join("")}</div>
   <div class="toolbar chips">${["Tümü",...katL.map(k=>k[0])].map(k=>`<button class="chip ${UI.giderKat===k?"on":""}" data-act="giderKat" data-v="${esc(k)}">${esc(k)}</button>`).join("")}</div>
-  <div class="card"><div class="list">${rs.map(g=>`<div class="row" tabindex="0" data-act="giderAc" data-id="${esc(g.id)}"><div class="lead" style="font-variant-numeric:tabular-nums">${tarih(g.tarih)}</div><div class="main"><div class="t1">${esc(g.kategori)}</div><div class="t2">${esc([g.aciklama,g.odeme,g.kasaId?kasaAdi(g.kasaId):"",g.depo].filter(Boolean).join(" · "))}</div></div><div class="end"><b>${TL(g.tutar)}</b></div></div>`).join("")||`<div class="empty">Bu aralıkta gider yok. Kira, maaş, fatura gibi giderleri girdikçe Raporlar'da net kâr hesaplanır.</div>`}</div></div>
-  <p class="muted" style="font-size:13px">Stoğa giren parça alımlarını buraya yazmayın: onların maliyeti satışta zaten brüt kârdan düşülüyor. Giderler BizimHesap'a gönderilmez.</p>`;
+  <div class="card"><div class="list">${rs.map(g=>`<div class="row" tabindex="0" data-act="giderAc" data-id="${esc(g.id)}"><div class="lead" style="font-variant-numeric:tabular-nums">${tarih(g.tarih)}</div><div class="main"><div class="t1">${esc(g.kategori)}</div><div class="t2">${esc([g.aciklama,g.odeme==="Cari"?"Cari: "+g.hesap:g.odeme,g.kasaId?kasaAdi(g.kasaId):"",g.depo,g.kaynak==="BizimHesap Excel"?"BizimHesap":""].filter(Boolean).join(" · "))}</div></div><div class="end"><b>${TL(g.tutar)}</b></div></div>`).join("")||`<div class="empty">Bu aralıkta gider yok. Kira, maaş, fatura gibi giderleri girdikçe Raporlar'da net kâr hesaplanır.</div>`}</div></div>
+  <p class="muted" style="font-size:13px">BizimHesap'a girdiğiniz masrafları aktarmak için: BizimHesap → Masraflar raporunu Excel olarak indirip "BizimHesap Excel'i yükle" ile seçin. Aynı dosyayı tekrar yüklerseniz kayıtlar ikinci kez eklenmez. Stoğa giren parça alımlarını gider olarak girmeyin; onların maliyeti satışta zaten brüt kârdan düşülüyor.</p>`;
 };
+/* ---------- BizimHesap masraf raporu (Excel) aktarımı ---------- */
+async function xlsxYukle(){ if(window.XLSX) return; await new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"; sc.onload=ok; sc.onerror=()=>no(new Error("Excel okuyucu yüklenemedi")); document.head.appendChild(sc); }); }
+const temizMetin=v=>String(v==null?"":v).replace(/[\u200e\u200f\u00a0]/g," ").replace(/\s+/g," ").trim();
+function hashStr(x){ let a=5381,b=52711; for(let i=0;i<x.length;i++){ const c=x.charCodeAt(i); a=((a*33)^c)|0; b=((b*31)^c)|0; } return (a>>>0).toString(36)+(b>>>0).toString(36); }
+function excelTarih(v){ if(v instanceof Date) return new Date(v.getFullYear(),v.getMonth(),v.getDate(),12).getTime(); if(typeof v==="number") return Math.round((v-25569)*86400000)+12*3600000-new Date().getTimezoneOffset()*0; const m=String(v||"").match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/); return m?new Date(+m[3],+m[2]-1,+m[1],12).getTime():null; }
+function masrafSatirlari(rows){
+  const hi=rows.findIndex(r=>r&&r.some(c=>/belge\s*tarih/i.test(temizMetin(c)))&&r.some(c=>/^toplam$/i.test(temizMetin(c))));
+  if(hi<0) throw new Error("Bu dosya BizimHesap masraf raporuna benzemiyor (BelgeTarihi ve Toplam sütunları bulunamadı)");
+  const H=rows[hi].map(c=>low(temizMetin(c))), col=re=>H.findIndex(h=>re.test(h));
+  const c={tarih:col(/^belge\s*tarih/),odemeT:col(/^ödeme\s*tarih/),durum:col(/^durum/),kim:col(/işlemi yapan/),ana:col(/^ana masraf/),alt:col(/^alt masraf/),hesap:col(/^hesap/),no:col(/^no$/),acik:col(/^açıklama/),tutar:col(/^toplam/)};
+  const kasalar=kasaListesi(), say={}, out=[];
+  for(const r of rows.slice(hi+1)){
+    if(!r) continue; const t=excelTarih(r[c.tarih]); const tutar=typeof r[c.tutar]==="number"?r[c.tutar]:num(String(r[c.tutar]||"").replace(/TL/i,"").replace(/\./g,"").replace(",","."));
+    if(!t||!(tutar>0)) continue;
+    const ana=temizMetin(r[c.ana]), alt=temizMetin(r[c.alt]), hesap=temizMetin(r[c.hesap]), acik=temizMetin(r[c.acik]), no=temizMetin(r[c.no]);
+    const kasa=kasalar.find(k=>low(temizMetin(k.title))===low(hesap));
+    const odeme=kasa?(/kasa/i.test(kasa.title)?"Nakit":/pos|kredi|kart/i.test(kasa.title)?"Kredi Kartı":"Havale/EFT"):"Cari";
+    const metin=up(acik+" "+hesap); const depo=/VEL[İI]BABA/.test(metin)?"Velibaba":/SULTANBEYL[İI]/.test(metin)?"Sultanbeyli":"";
+    const anahtar=[dInput(t),ana,alt,hesap,no,acik,tutar].join("|"); say[anahtar]=(say[anahtar]||0)+1;
+    out.push({id:"bhm-"+hashStr(anahtar+"#"+say[anahtar]),tarih:t,kategori:alt||ana||"Diğer",anaKategori:ana,tutar:r2(tutar),odeme,kasaId:kasa?kasa.id:"",hesap,depo,
+      aciklama:acik,belgeNo:no,durum:temizMetin(r[c.durum]),islemiYapan:temizMetin(r[c.kim]),odemeTarihi:excelTarih(r[c.odemeT])||null,kaynak:"BizimHesap Excel"});
+  }
+  return out;
+}
+async function masrafExcelAktar(dosya){
+  try{
+    await xlsxYukle();
+    const wb=XLSX.read(await dosya.arrayBuffer(),{type:"array",cellDates:true});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:null});
+    const L=masrafSatirlari(rows);
+    if(!L.length){ toast("Dosyada gider satırı bulunamadı"); return; }
+    const yeni=L.filter(g=>!S.giderler[g.id]), top=yeni.reduce((t,g)=>t+g.tutar,0);
+    const ilk=Math.min(...L.map(g=>g.tarih)), son=Math.max(...L.map(g=>g.tarih));
+    if(!yeni.length){ toast(`${L.length} giderin hepsi zaten programda`); return; }
+    if(!await onay(`${tarih(ilk)} – ${tarih(son)} arası ${L.length} gider bulundu. ${yeni.length} tanesi yeni (toplam ${TL(top)}), ${L.length-yeni.length} tanesi zaten aktarılmış. Yeniler eklensin mi?`,"Aktar")) return;
+    let n=0; for(const g of yeni){ const {id,...d}=g; await put("giderler",id,Object.assign(d,{olusturma:Date.now()})); n++; }
+    toast(`${n} gider aktarıldı`); UI.giderAralik="tumu"; render();
+  }catch(e){ toast(e.message||String(e)); }
+}
+
 function giderHTML(){ const g=F, yeni=!g.id;
   return `<div class="hd"><h2>${yeni?"Yeni gider":"Gider"}</h2><button class="btn" data-act="kapat">Kapat</button></div>
   <div class="fg">
@@ -1874,6 +1914,7 @@ document.addEventListener("change",e=>{
   if(d.u==="satisKasa"){ UI.satisKasa=t.value; UI.satisKasaYon=UI.satisYontem+"|"+UI.satisDepo; return; }
   if(d.u==="kasaGun"){ UI.kasaGun=t.value||dInput(Date.now()); UI.kasaSayim=""; UI.kasaAcilis=""; UI.kasaNot=""; render(); return; }
   if(d.u!==undefined){ UI[d.u]=t.value; render(); return; }
+  if(t.id==="masraf-dosya"&&t.files&&t.files[0]){ const f=t.files[0]; t.value=""; masrafExcelAktar(f); return; }
   if(t.id==="yedek-dosya"&&t.files&&t.files[0]){ const dosya=t.files[0]; (async()=>{ t.value="";
       let metin; try{ metin=/\.gz$/i.test(dosya.name)?await new Response(dosya.stream().pipeThrough(new DecompressionStream("gzip"))).text():await new Promise((ok,no)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=no; fr.readAsText(dosya); }); }catch(err){ toast("Dosya açılamadı"); return; }
       let o; try{ o=JSON.parse(metin); }catch(err){ toast("Dosya okunamadı. Programın indirdiği yedek dosyasını seçin."); return; }
@@ -1897,7 +1938,7 @@ window.addEventListener("hashchange",()=>{ view=hashView(); if(M) kapat(); rende
 try{ const g=localStorage.getItem("akcan_isgor"); if(g==="pano"||g==="liste") UI.isGorunum=g; }catch(e){}
 if("serviceWorker" in navigator&&location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
 baslat();
-window.__test={setRol:r=>{ROL=r;render();},izin,hesap,num,plakaFmt,plakaKey,istenenEtki,telKey,S};
+window.__test={masrafSatirlari,setRol:r=>{ROL=r;render();},izin,hesap,num,plakaFmt,plakaKey,istenenEtki,telKey,S};
 })();
 </script>
 </body>

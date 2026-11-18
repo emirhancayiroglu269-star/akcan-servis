@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Servis teklifi</title>
+<title>Araç durumu</title>
 <style>
 :root{--ink:#16181b;--muted:#636a73;--line:#e3e0da;--bg:#f4f2ee;--card:#fff;--accent:#cf4510;--ok:#1f7a3a;--ok-soft:#e3f2e7;--bad:#b3261e;--bad-soft:#fbe7e5}
 *{box-sizing:border-box}
@@ -33,10 +33,18 @@ button:disabled{opacity:.6}
 .sonuc.onay{background:var(--ok-soft);color:var(--ok)}
 .sonuc.red{background:var(--bad-soft);color:var(--bad)}
 a{color:var(--accent)}
+.adim{display:flex;gap:10px;align-items:flex-start;padding:6px 0;position:relative}
+.adim .n{flex:0 0 22px;height:22px;border-radius:50%;border:2px solid var(--line);background:#fff;margin-top:1px}
+.adim.ok .n{background:var(--ok);border-color:var(--ok)}
+.adim.su .n{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px rgba(207,69,16,.18)}
+.adim .a{font-weight:600}.adim:not(.ok):not(.su) .a{color:var(--muted);font-weight:400}
+.adim .z{color:var(--muted);font-size:13px}
+.durum-buyuk{font-size:20px;font-weight:800;margin:4px 0}
+.hazir{background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:12px;font-weight:700;margin-top:8px}
 </style>
 </head>
 <body>
-<div class="w" id="app"><div class="card">Teklif yükleniyor…</div></div>
+<div class="w" id="app"><div class="card">Yükleniyor…</div></div>
 <script>
 (function(){
   const FN="https://amtgrdyongsmkrfdmhgq.supabase.co/functions/v1/teklif", KEY="sb_publishable_o0c4V1Y-ElYjZcnHAX9Taw_DLy-0UNP";
@@ -47,36 +55,52 @@ a{color:var(--accent)}
   const tarih=ms=>ms?new Date(ms).toLocaleString("tr-TR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
   const plaka=p=>{const m=String(p||"").toUpperCase().replace(/\s+/g,"").match(/^(\d{2})([A-ZÇĞİÖŞÜ]{1,3})(\d{2,5})$/);return m?`${m[1]} ${m[2]} ${m[3]}`:String(p||"");};
   let V=null;
-  async function yukle(){
+  const ADIM=[["Beklemede","Araç kabul edildi"],["İşlemde","İşlem yapılıyor"],["Tamamlandı","Aracınız hazır"],["Teslim Edildi","Teslim edildi"]];
+  const DURUM_MSG={"Beklemede":"Aracınız servisimize kabul edildi, sırası bekleniyor.","İşlemde":"Aracınız üzerinde çalışılıyor.","Parça Bekleniyor":"Aracınız için parça bekleniyor.","Dış Serviste":"Aracınızın bir işlemi anlaşmalı servisimizde yapılıyor.","Tamamlandı":"İşlemler tamamlandı, aracınızı teslim alabilirsiniz.","Teslim Edildi":"Aracınız teslim edildi. Bizi tercih ettiğiniz için teşekkür ederiz."};
+  function durumHTML(){
+    const G=V.durumGecmis||[], son=d=>{ const x=[...G].reverse().find(y=>y.d===d); return x?x.t:null; };
+    const sira=ADIM.map(a=>a[0]), d=V.durum==="Parça Bekleniyor"||V.durum==="Dış Serviste"?"İşlemde":V.durum, idx=sira.indexOf(d);
+    const ad=V.durum==="Parça Bekleniyor"?"Parça bekleniyor":V.durum==="Dış Serviste"?"Dış serviste":"";
+    return `<div class="card"><h2>Araç durumu</h2><div class="durum-buyuk">${esc(V.durum==="Tamamlandı"?"Aracınız hazır":V.durum==="Teslim Edildi"?"Teslim edildi":V.durum==="Beklemede"?"Kabul edildi":V.durum)}</div>
+      <p class="muted" style="margin:0 0 8px">${esc(DURUM_MSG[V.durum]||"")}</p>
+      ${ADIM.map((a,i)=>{ const t=i===0?(V.giris||son(a[0])):i===3?(V.teslim||son(a[0])):son(a[0]); const cls=i<idx?"ok":i===idx?(i===3?"ok":"su"):""; return `<div class="adim ${cls}"><div class="n"></div><div><div class="a">${esc(a[1])}${i===1&&ad&&i===idx?` · ${esc(ad)}`:""}</div>${t&&i<=idx?`<div class="z">${esc(tarih(t))}</div>`:""}</div></div>`; }).join("")}
+      ${V.bekleyenParca&&V.bekleyenParca.length&&idx<2?`<p class="muted" style="margin:8px 0 0">Beklenen parça: ${V.bekleyenParca.map(p=>esc(p.ad)+(p.beklenen?" ("+new Date(p.beklenen).toLocaleDateString("tr-TR",{day:"numeric",month:"long"})+")":"")).join(", ")}</p>`:""}
+      ${V.tahminiTeslim&&idx<2?`<p style="margin:8px 0 0"><b>Tahmini teslim:</b> ${esc(tarih(V.tahminiTeslim))}</p>`:""}
+      ${V.durum==="Tamamlandı"?`<div class="hazir">Aracınızı teslim alabilirsiniz.${V.kalan>0?` Ödenecek tutar: ${TL(V.kalan)}`:""}</div>`:""}
+      <p class="muted" style="margin:8px 0 0;font-size:12px">Bu sayfa açık kaldıkça kendiliğinden güncellenir.</p></div>`;
+  }
+  async function yukle(sessiz){
     try{
       const r=await fetch(FN+"?t="+encodeURIComponent(t),{headers:{apikey:KEY}});
-      const j=await r.json(); if(!r.ok||j.hata) throw new Error(j.hata||"Teklif açılamadı.");
+      const j=await r.json(); if(!r.ok||j.hata) throw new Error(j.hata||"Sayfa açılamadı.");
+      if(sessiz&&V&&JSON.stringify(j)===JSON.stringify(V)) return;
+      if(sessiz){ const a=document.activeElement; if(a&&/INPUT|TEXTAREA/.test(a.tagName)) return; }
       V=j; ciz();
-    }catch(e){ app.innerHTML=`<div class="card"><h1>Teklif açılamadı</h1><p class="muted">${esc(e.message)}</p></div>`; }
+    }catch(e){ if(!sessiz) app.innerHTML=`<div class="card"><h1>Sayfa açılamadı</h1><p class="muted">${esc(e.message)}</p></div>`; }
   }
   function ciz(sonucMsg){
     const f=V.firma, o=V.onay;
     app.innerHTML=`
-    <div class="card"><h1>${esc(f.ad||"Servis teklifi")}</h1><div class="muted">${esc(f.adres||"")}${f.tel?` · <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:""}</div></div>
+    <div class="card"><h1>${esc(f.ad||"Servis")}</h1><div class="muted">${esc(f.adres||"")}${f.tel?` · <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:""}</div></div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span class="plaka">${esc(plaka(V.plaka))}</span><span class="muted">${esc(V.no)}</span></div>
       <p style="margin:10px 0 0">${esc([V.marka,V.model].filter(Boolean).join(" "))}${V.km?` · ${esc(V.km)} km`:""}${V.musteri?`<br><span class="muted">Sayın ${esc(V.musteri)}</span>`:""}</p>
       ${V.sikayet?`<p style="margin:10px 0 0"><b>Şikayet:</b> ${esc(V.sikayet)}</p>`:""}
       ${V.tespit?`<p style="margin:6px 0 0"><b>Tespit / yapılacak işlem:</b> ${esc(V.tespit)}</p>`:""}
-      ${V.tahminiTeslim?`<p class="muted" style="margin:6px 0 0">Tahmini teslim: ${esc(tarih(V.tahminiTeslim))}</p>`:""}
     </div>
+    ${durumHTML()}
     <div class="card"><h2>Parça ve işçilik</h2>
       ${V.kalemler.length?`<table><tbody>${V.kalemler.map(k=>`<tr><td>${esc(k.ad)}<div class="tip">${esc(k.tip)}${k.adet!==1?` · ${esc(String(k.adet).replace(".",","))} × ${TL(k.fiyat)}`:""}</div></td><td class="n">${TL(k.tutar)}</td></tr>`).join("")}</tbody></table>`:`<p class="muted">Henüz kalem eklenmedi.</p>`}
       ${V.toplam.indirim?`<div class="top"><span>Ara toplam</span><span>${TL(V.toplam.ara)}</span></div><div class="top"><span>İndirim</span><span>−${TL(V.toplam.indirim)}</span></div>`:""}
       <div class="top"><span class="muted">KDV (dahil)</span><span class="muted">${TL(V.toplam.kdv)}</span></div>
       <div class="top big"><span>Toplam</span><span>${TL(V.toplam.genel)}</span></div>
     </div>
-    <div class="card" id="karar">
+    ${!V.kalemler.length||((V.durum==="Tamamlandı"||V.durum==="Teslim Edildi")&&!o)?"":`<div class="card" id="karar">
       ${sonucMsg?`<div class="sonuc ${o&&o.durum==="red"?"red":"onay"}">${esc(sonucMsg)}</div>`:o?`<div class="sonuc ${o.durum==="red"?"red":"onay"}">${o.durum==="red"?"Bu teklifi onaylamadınız":"Bu teklifi onayladınız"} · ${esc(tarih(o.zaman))}${o.ad?` · ${esc(o.ad)}`:""}</div><p class="muted" style="margin-top:10px">Kararınızı değiştirmek isterseniz aşağıdan tekrar seçebilirsiniz.</p>`:`<h2>Onayınız</h2><p class="muted" style="margin:0">Yukarıdaki işlemlerin yapılmasını onaylıyor musunuz?</p>`}
-      <label>Adınız<input id="ad" autocomplete="name" value="${esc(V.musteri||"")}"></label>
+      ${V.durum==="Tamamlandı"||V.durum==="Teslim Edildi"?"":`<label>Adınız<input id="ad" autocomplete="name" value="${esc(V.musteri||"")}"></label>
       <label>Notunuz (isteğe bağlı)<textarea id="not" placeholder="Örn. sadece fren balatası yapılsın"></textarea></label>
-      <div class="btns"><button class="hayir" data-k="red">Onaylamıyorum</button><button class="evet" data-k="onay">Onaylıyorum</button></div>
-    </div>
+      <div class="btns"><button class="hayir" data-k="red">Onaylamıyorum</button><button class="evet" data-k="onay">Onaylıyorum</button></div>`}
+    </div>`}
     <p class="muted" style="text-align:center">Sorunuz varsa bizi arayın${f.tel?`: <a href="tel:${esc(f.tel.replace(/\s/g,""))}">${esc(f.tel)}</a>`:"."}</p>`;
     app.querySelectorAll("button[data-k]").forEach(b=>b.addEventListener("click",()=>gonder(b.dataset.k)));
   }
@@ -90,7 +114,8 @@ a{color:var(--accent)}
       const kr=document.getElementById("karar"); if(kr&&kr.scrollIntoView) kr.scrollIntoView({behavior:"smooth"});
     }catch(e){ alert(e.message); bs.forEach(b=>b.disabled=false); }
   }
-  if(!t) app.innerHTML=`<div class="card"><h1>Link eksik</h1><p class="muted">Size gönderilen linki tam olarak açın.</p></div>`; else yukle();
+  if(!t) app.innerHTML=`<div class="card"><h1>Link eksik</h1><p class="muted">Size gönderilen linki tam olarak açın.</p></div>`;
+  else { yukle(); setInterval(()=>{ if(!document.hidden) yukle(true); },60000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) yukle(true); }); }
 })();
 </script>
 </body>

@@ -20,6 +20,13 @@ export function ozet(r: any) {
   return (a >>> 0).toString(36);
 }
 
+// Aracın bulunduğu şubenin adres/telefonu (servis şubesi için randevu ayarlarındaki adres)
+function servisFirma(A: any, depo: string) {
+  const subeler = String(A.randevuSubeler ?? "Sultanbeyli").split(",").map((x) => x.trim());
+  const servis = !depo || subeler.includes(depo);
+  return { ad: A.firma || "", tel: (servis && A.randevuTel) || A.tel || "", adres: (servis && A.randevuAdres) || A.adres || "", sube: depo || "" };
+}
+
 async function bul(t: string) {
   if (!/^[A-Za-z0-9]{20,64}$/.test(t)) return null;
   const { data } = await sb.from("docs").select("id,data").eq("col", "isemirleri").eq("data->>teklifToken", t).maybeSingle();
@@ -50,9 +57,13 @@ Deno.serve(async (req) => {
     const A: any = g?.data || {};
     const h = hesap(r.kalemler, r.indirim);
     return yanit({
-      firma: { ad: A.firma || "", tel: A.tel || "", adres: A.adres || "" },
+      firma: servisFirma(A, r.depo),
       no: r.no, plaka: r.plaka, marka: r.marka || "", model: r.model || "", km: r.km || "", musteri: r.musteriAd || "",
       sikayet: r.sikayet || "", tespit: r.tespit || "", durum: r.durum, tahminiTeslim: r.tahminiTeslim || null,
+      giris: r.giris || null, teslim: r.teslim || null,
+      durumGecmis: (r.durumGecmis || []).map((x: any) => ({ d: x.d, t: x.t })).slice(-20),
+      bekleyenParca: (r.siparisler || []).filter((x: any) => x.durum !== "Geldi").map((x: any) => ({ ad: x.ad, beklenen: x.beklenen || null })),
+      kalan: r2(Math.max(0, h.genel - (r.tahsilatlar || []).filter((t: any) => t.yontem !== "Veresiye").reduce((s: number, t: any) => s + num(t.tutar), 0))),
       kalemler: (r.kalemler || []).map((k: any) => ({ tip: k.tip === "parca" ? "Parça" : "İşçilik", ad: k.ad, adet: num(k.adet), fiyat: num(k.fiyat), kdv: num(k.kdv), tutar: r2(num(k.adet) * num(k.fiyat)) })),
       toplam: h,
       onay: r.onay && r.onay.ozet === ozet(r) ? { durum: r.onay.durum, zaman: r.onay.zaman, ad: r.onay.ad } : null,

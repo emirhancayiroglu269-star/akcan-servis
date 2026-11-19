@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     const mevcut = await allDocs("bhhareket");
     const mevcutMap = new Map(mevcut.map((d) => [d.id, d.data]));
     // BizimHesap ekstre servisinin istek sınırı düşük: günlük bütçe ve sınıra takılınca 1 saat bekleme.
-    // Öncelik: perakende cari (peşin satışlar, 10 dakikada bir), bakiyesi değişenler, sonra sırayla diğerleri (çalışma başına 1).
+    // Öncelik: perakende cari (peşin satışlar, mesaide 10 dakikada bir, gece saatte bir), bakiyesi değişenler, sonra sırayla diğerleri (çalışma başına 1).
     const simdi = Date.now();
     const gun = new Date(simdi + 3 * 3600000).toISOString().slice(0, 10);
     const sayac = durum.sayac && durum.sayac.gun === gun ? durum.sayac : { gun, n: 0 };
@@ -50,10 +50,14 @@ Deno.serve(async (req) => {
     if (!sinir && durum.bekle && simdi < durum.bekle) {
       return json({ ok: true, bekleme: new Date(durum.bekle).toISOString() });
     }
-    const MAX = sinir || Math.max(0, Math.min(5, GUNLUK - sayac.n));
+    // Bütçe güne yayılır: gece harcanıp gündüz faturalaşma kontrolüne yer kalmaması için saat başına pay.
+    const dakika = Math.floor(((simdi + 3 * 3600000) % 86400000) / 60000);
+    const pay = Math.ceil(GUNLUK * Math.min(1, (dakika + 60) / 1440));
+    const MAX = sinir || Math.max(0, Math.min(5, GUNLUK - sayac.n, pay - sayac.n));
+    const mesai = dakika >= 8 * 60 && dakika < 21 * 60;
     const sirali = [...musBH].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const sec = new Map<string, Rec>();
-    if (MAX > 0 && (!durum.perakendeSon || simdi - durum.perakendeSon > 10 * 60000)) for (const c of sirali) if (/perakende/i.test(c.title || "") && sec.size < MAX) sec.set(c.id, c);
+    if (MAX > 0 && (!durum.perakendeSon || simdi - durum.perakendeSon > (mesai ? 10 : 60) * 60000)) for (const c of sirali) if (/perakende/i.test(c.title || "") && sec.size < MAX) sec.set(c.id, c);
     for (const c of sirali) if (sec.size < MAX && bakiyeEski[c.id] !== undefined && Number(bakiyeEski[c.id]) !== trNum(c.balance)) sec.set(c.id, c);
     let imlec = Number(durum.imlec || 0) % Math.max(1, sirali.length);
     for (let n = 0, eklendi = 0; sec.size < MAX && eklendi < 1 && n < sirali.length; n++) { const c = sirali[imlec]; imlec = (imlec + 1) % sirali.length; if (!sec.has(c.id)) { sec.set(c.id, c); eklendi++; } }
